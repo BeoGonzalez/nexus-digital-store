@@ -7,9 +7,8 @@ from nexus_backend.config import get_settings
 
 
 class HuggingFaceEmbeddingAdapter:
-    def __init__(self) -> None:
-        settings = get_settings()
-        self._model = _get_embedding_model(settings.EMBEDDING_MODEL_NAME)
+    def __init__(self, model_name: str) -> None:
+        self._model = _get_embedding_model(model_name)
 
     async def embed_text(self, text: str) -> list[float]:
         loop = asyncio.get_running_loop()

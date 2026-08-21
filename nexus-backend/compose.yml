@@ -1,0 +1,61 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexus_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Las variables pueden mapearse directamente o tomarse de un .env
+      - DATABASE_URL=postgresql+asyncpg://nexus:nexus123@db:5432/nexus_db
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-nexus-digital-store}
+      - SECRET_KEY=${SECRET_KEY:-super_secret_key_change_in_prod}
+    volumes:
+      # CRÍTICO: Persistencia del modelo de HuggingFace (~470MB) para evitar descargas en cada reinicio
+      # Usamos el directorio home de root ya que es el usuario por defecto de la imagen de Python
+      - hf_cache:/root/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+    # Aceleración por Hardware (NVIDIA CUDA / WSL2)
+    # Descomenta este bloque si deseas que langchain-huggingface utilice la GPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  db:
+    # Imagen de PostgreSQL 16 con la extensión pgvector preinstalada (Requisito fundamental para búsquedas de similitud)
+    image: pgvector/pgvector:pg16
+    container_name: nexus_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus123
+      POSTGRES_DB: nexus_db
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistencia de los datos relacionales y vectoriales
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Healthcheck riguroso utilizando pg_isready para asegurar que la DB acepta conexiones
+      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+    name: nexus_postgres_data
+  hf_cache:
+    name: nexus_hf_cache
