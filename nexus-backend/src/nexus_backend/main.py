@@ -2,8 +2,15 @@ import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from nexus_backend.shared.domain.exceptions import (
+    BusinessRuleViolationException,
+    ResourceNotFoundException,
+    UnauthorizedException,
+)
 
 from nexus_backend.config import get_settings
 
@@ -20,7 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Database initialized")
 
     from nexus_backend.ai_assistant.infrastructure.embeddings import HuggingFaceEmbeddingAdapter
-    _adapter = HuggingFaceEmbeddingAdapter()
+    _adapter = HuggingFaceEmbeddingAdapter(model_name=settings.EMBEDDING_MODEL_NAME)
     await _adapter.embed_text("warmup")
     logger.info("Embedding model loaded and warmed up")
 
@@ -61,6 +68,27 @@ def create_app() -> FastAPI:
     @application.get("/api/v1/health", tags=["Health"])
     async def health_check() -> dict:
         return {"status": "healthy", "service": settings.APP_NAME}
+
+    @application.exception_handler(ResourceNotFoundException)
+    async def not_found_handler(request: Request, exc: ResourceNotFoundException):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": str(exc)},
+        )
+
+    @application.exception_handler(BusinessRuleViolationException)
+    async def business_rule_handler(request: Request, exc: BusinessRuleViolationException):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(exc)},
+        )
+
+    @application.exception_handler(UnauthorizedException)
+    async def unauthorized_handler(request: Request, exc: UnauthorizedException):
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": str(exc)},
+        )
 
     return application
 

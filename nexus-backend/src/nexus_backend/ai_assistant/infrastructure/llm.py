@@ -7,11 +7,10 @@ from nexus_backend.config import get_settings
 
 
 class GroqLLMAdapter:
-    def __init__(self) -> None:
-        settings = get_settings()
+    def __init__(self, api_key: str, model_name: str) -> None:
         self._llm = ChatGroq(
-            api_key=settings.GROQ_API_KEY,
-            model=settings.GROQ_MODEL_NAME,
+            api_key=api_key,
+            model=model_name,
             temperature=0.7,
             max_tokens=1024,
             streaming=True,

@@ -10,6 +10,7 @@ from nexus_backend.auth.application.dtos import (
 from nexus_backend.auth.application.services import AuthService
 from nexus_backend.auth.domain.entities import User
 from nexus_backend.auth.infrastructure.repositories import SQLAlchemyUserRepository
+from nexus_backend.auth.infrastructure.security import JwtTokenIssuer, PasslibPasswordHasher
 from nexus_backend.auth.presentation.dependencies import get_current_user
 from nexus_backend.database import get_db_session
 
@@ -17,7 +18,11 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 def _get_auth_service(session: AsyncSession = Depends(get_db_session)) -> AuthService:
-    return AuthService(user_repo=SQLAlchemyUserRepository(session))
+    return AuthService(
+        user_repo=SQLAlchemyUserRepository(session),
+        password_hasher=PasslibPasswordHasher(),
+        token_issuer=JwtTokenIssuer(),
+    )
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

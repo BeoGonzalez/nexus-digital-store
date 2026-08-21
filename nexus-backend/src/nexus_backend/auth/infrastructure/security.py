@@ -9,18 +9,19 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _settings = get_settings()
 
 
-def hash_password(plain: str) -> str:
-    return _pwd_context.hash(plain)
+class PasslibPasswordHasher:
+    def hash(self, plain: str) -> str:
+        return _pwd_context.hash(plain)
+
+    def verify(self, plain: str, hashed: str) -> bool:
+        return _pwd_context.verify(plain, hashed)
 
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
-
-
-def create_jwt_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=_settings.JWT_EXPIRATION_MINUTES)
-    payload = {"sub": subject, "exp": expire}
-    return jwt.encode(payload, _settings.JWT_SECRET, algorithm=_settings.JWT_ALGORITHM)
+class JwtTokenIssuer:
+    def issue(self, subject: str) -> str:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=_settings.JWT_EXPIRATION_MINUTES)
+        payload = {"sub": subject, "exp": expire}
+        return jwt.encode(payload, _settings.JWT_SECRET, algorithm=_settings.JWT_ALGORITHM)
 
 
 def decode_jwt_token(token: str) -> dict:

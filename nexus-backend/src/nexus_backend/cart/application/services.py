@@ -1,10 +1,9 @@
 from uuid import UUID
 
-from fastapi import HTTPException, status
-
 from nexus_backend.cart.domain.entities import Cart
 from nexus_backend.cart.domain.ports import CartRepository
 from nexus_backend.catalog.domain.ports import ProductRepository
+from nexus_backend.shared.domain.exceptions import BusinessRuleViolationException, ResourceNotFoundException
 
 
 class CartService:
@@ -18,12 +17,9 @@ class CartService:
     async def add_item(self, user_id: UUID, product_id: UUID, quantity: int) -> Cart:
         product = await self._product_repo.get_by_id(product_id)
         if not product:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+            raise ResourceNotFoundException("Product not found")
         if product.stock < quantity:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Insufficient stock. Available: {product.stock}",
-            )
+            raise BusinessRuleViolationException(f"Insufficient stock. Available: {product.stock}")
 
         cart = await self._cart_repo.get_or_create_cart(user_id)
         return await self._cart_repo.add_item(
@@ -46,17 +42,13 @@ class CartService:
     async def checkout(self, user_id: UUID) -> Cart:
         cart = await self._cart_repo.get_or_create_cart(user_id)
         if not cart.items:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cart is empty",
-            )
+            raise BusinessRuleViolationException("Cart is empty")
 
         for item in cart.items:
             success = await self._product_repo.update_stock(item.product_id, -item.quantity)
             if not success:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Insufficient stock for product {item.product_name}",
+                raise BusinessRuleViolationException(
+                    f"Insufficient stock for product {item.product_name}"
                 )
 
         return await self._cart_repo.checkout(cart.id)
