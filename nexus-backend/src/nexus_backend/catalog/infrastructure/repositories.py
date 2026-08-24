@@ -1,105 +1,150 @@
-from decimal import Decimal
 from uuid import UUID
-
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from nexus_backend.catalog.domain.entities import Product
-from nexus_backend.catalog.infrastructure.models import ProductModel
+from nexus_backend.catalog.domain.entities import VideoGame as VideoGameEntity, Genre as GenreEntity
+from nexus_backend.catalog.domain.ports import VideoGameRepository
+from nexus_backend.catalog.infrastructure.models import VideoGame as VideoGameModel, Genre as GenreModel
 
 
-class SQLAlchemyProductRepository:
+class SQLAlchemyVideoGameRepository(VideoGameRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def list_all(self, skip: int = 0, limit: int = 50) -> list[Product]:
-        result = await self._session.execute(
-            select(ProductModel).offset(skip).limit(limit).order_by(ProductModel.created_at.desc())
-        )
-        return [self._to_entity(m) for m in result.scalars().all()]
-
-    async def get_by_id(self, product_id: UUID) -> Product | None:
-        result = await self._session.execute(
-            select(ProductModel).where(ProductModel.id == product_id)
-        )
-        model = result.scalar_one_or_none()
-        return self._to_entity(model) if model else None
-
-    async def create(self, product: Product) -> Product:
-        model = ProductModel(
-            id=product.id,
-            name=product.name,
-            brand=product.brand,
-            category=product.category,
-            description=product.description,
-            price=float(product.price),
-            stock=product.stock,
-            specifications=product.specifications,
-            image_url=product.image_url,
-            embedding=product.embedding,
-        )
-        self._session.add(model)
-        await self._session.flush()
-        return self._to_entity(model)
-
-    async def update(self, product: Product) -> Product:
-        result = await self._session.execute(
-            select(ProductModel).where(ProductModel.id == product.id)
-        )
-        model = result.scalar_one()
-        model.name = product.name
-        model.brand = product.brand
-        model.category = product.category
-        model.description = product.description
-        model.price = float(product.price)
-        model.stock = product.stock
-        model.specifications = product.specifications
-        model.image_url = product.image_url
-        model.embedding = product.embedding
-        await self._session.flush()
-        return self._to_entity(model)
-
-    async def update_stock(self, product_id: UUID, quantity_delta: int) -> bool:
-        result = await self._session.execute(
-            update(ProductModel)
-            .where(
-                ProductModel.id == product_id,
-                ProductModel.stock + quantity_delta >= 0,
-            )
-            .values(stock=ProductModel.stock + quantity_delta)
-        )
-        return result.rowcount > 0
-
-    async def search_by_vector(self, embedding: list[float], top_k: int = 5) -> list[Product]:
-        result = await self._session.execute(
-            select(ProductModel)
-            .where(ProductModel.embedding.isnot(None))
-            .order_by(ProductModel.embedding.cosine_distance(embedding))
-            .limit(top_k)
-        )
-        return [self._to_entity(m) for m in result.scalars().all()]
-
-    async def get_without_embedding(self, limit: int = 100) -> list[Product]:
-        result = await self._session.execute(
-            select(ProductModel)
-            .where(ProductModel.embedding.is_(None))
-            .limit(limit)
-        )
-        return [self._to_entity(m) for m in result.scalars().all()]
-
-    @staticmethod
-    def _to_entity(model: ProductModel) -> Product:
-        return Product(
+    def _to_entity(self, model: VideoGameModel) -> VideoGameEntity:
+        return VideoGameEntity(
             id=model.id,
-            name=model.name,
-            brand=model.brand,
-            category=model.category,
+            title=model.title,
             description=model.description,
-            price=Decimal(str(model.price)),
+            price_clp=model.price_clp,
             stock=model.stock,
-            specifications=model.specifications or {},
-            image_url=model.image_url,
-            embedding=list(model.embedding) if model.embedding is not None else None,
+            embedding=model.embedding if model.embedding is not None else [],
+            genres=[GenreEntity(id=g.id, name=g.name) for g in model.genres],
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
+
+    async def get_by_id(self, video_game_id: UUID) -> VideoGameEntity | None:
+        stmt = (
+            select(VideoGameModel)
+            .where(VideoGameModel.id == video_game_id)
+            .options(selectinload(VideoGameModel.genres))
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
+    async def _get_or_create_genres(self, genre_names: list[str]) -> list[GenreModel]:
+        genres: list[GenreModel] = []
+        for name in genre_names:
+            clean_name = name.strip()
+            if not clean_name:
+                continue
+            stmt = select(GenreModel).where(GenreModel.name == clean_name)
+            result = await self._session.execute(stmt)
+            genre = result.scalar_one_or_none()
+            if not genre:
+                genre = GenreModel(name=clean_name)
+                self._session.add(genre)
+                await self._session.flush()
+            genres.append(genre)
+        return genres
+
+    async def create(self, video_game: VideoGameEntity) -> VideoGameEntity:
+        genre_models = await self._get_or_create_genres([g.name for g in video_game.genres])
+
+        model = VideoGameModel(
+            title=video_game.title,
+            description=video_game.description,
+            price_clp=video_game.price_clp,
+            stock=video_game.stock,
+            embedding=video_game.embedding if video_game.embedding else None,
+            genres=genre_models,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        await self._session.refresh(model, ["genres"])
+        return self._to_entity(model)
+
+    async def list_all(self, skip: int = 0, limit: int = 100) -> list[VideoGameEntity]:
+        stmt = (
+            select(VideoGameModel)
+            .options(selectinload(VideoGameModel.genres))
+            .order_by(VideoGameModel.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_entity(m) for m in result.scalars()]
+
+    async def get_without_embedding(self, limit: int = 100) -> list[VideoGameEntity]:
+        stmt = (
+            select(VideoGameModel)
+            .where(VideoGameModel.embedding == None)
+            .options(selectinload(VideoGameModel.genres))
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_entity(m) for m in result.scalars()]
+
+    async def update(self, video_game: VideoGameEntity) -> VideoGameEntity:
+        stmt = (
+            select(VideoGameModel)
+            .where(VideoGameModel.id == video_game.id)
+            .options(selectinload(VideoGameModel.genres))
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if not model:
+            raise ValueError(f"Video game {video_game.id} not found")
+
+        model.title = video_game.title
+        model.description = video_game.description
+        model.price_clp = video_game.price_clp
+        model.stock = video_game.stock
+        if video_game.embedding:
+            model.embedding = video_game.embedding
+
+        if video_game.genres:
+            genre_models = await self._get_or_create_genres([g.name for g in video_game.genres])
+            model.genres = genre_models
+
+        await self._session.flush()
+        await self._session.refresh(model, ["genres"])
+        return self._to_entity(model)
+
+    async def delete(self, video_game_id: UUID) -> bool:
+        from sqlalchemy.exc import IntegrityError
+        from nexus_backend.shared.domain.exceptions import BusinessRuleViolationException
+
+        try:
+            stmt = delete(VideoGameModel).where(VideoGameModel.id == video_game_id)
+            result = await self._session.execute(stmt)
+            await self._session.flush()
+            return (result.rowcount or 0) > 0
+        except IntegrityError as e:
+            await self._session.rollback()
+            raise BusinessRuleViolationException(
+                f"Cannot delete video game {video_game_id} because it is referenced in existing customer orders. Set stock to 0 to deactivate instead."
+            ) from e
+
+    async def search_by_vector(self, embedding: list[float], top_k: int = 5) -> list[VideoGameEntity]:
+        stmt = (
+            select(VideoGameModel)
+            .where(VideoGameModel.embedding != None)
+            .options(selectinload(VideoGameModel.genres))
+            .order_by(VideoGameModel.embedding.cosine_distance(embedding))
+            .limit(top_k)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_entity(m) for m in result.scalars()]
+
+    async def update_stock(self, video_game_id: UUID, quantity_change: int) -> bool:
+        stmt = (
+            update(VideoGameModel)
+            .where(VideoGameModel.id == video_game_id, VideoGameModel.stock + quantity_change >= 0)
+            .values(stock=VideoGameModel.stock + quantity_change)
+        )
+        result = await self._session.execute(stmt)
+        return (result.rowcount or 0) > 0

@@ -1,17 +1,20 @@
+import uuid
 from dataclasses import dataclass, field
-from decimal import Decimal
+from datetime import datetime
 
 from nexus_backend.shared.domain.entities import BaseEntity
 
 
 @dataclass
-class Product(BaseEntity):
+class Genre(BaseEntity):
     name: str = ""
-    brand: str = ""
-    category: str = ""
+
+
+@dataclass
+class VideoGame(BaseEntity):
+    title: str = ""
     description: str = ""
-    price: Decimal = Decimal("0.00")
+    price_clp: int = 0
     stock: int = 0
-    specifications: dict = field(default_factory=dict)
-    image_url: str = ""
-    embedding: list[float] | None = None
+    genres: list[Genre] = field(default_factory=list)
+    embedding: list[float] = field(default_factory=list)

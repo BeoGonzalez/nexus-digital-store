@@ -19,12 +19,19 @@ class AuthService:
         if existing:
             raise BusinessRuleViolationException("Email already registered")
 
+        # Resolve default role for new registrations
+        role = await self._user_repo.get_role_by_name("customer")
+        if not role:
+            raise BusinessRuleViolationException(
+                "Default role 'customer' not found. Seed the roles table first."
+            )
+
         user = User(
             email=email,
             hashed_password=self._password_hasher.hash(password),
             full_name=full_name,
         )
-        return await self._user_repo.create(user)
+        return await self._user_repo.create(user, role_id=role.id)
 
     async def authenticate(self, email: str, password: str) -> str:
         user = await self._user_repo.get_by_email(email)

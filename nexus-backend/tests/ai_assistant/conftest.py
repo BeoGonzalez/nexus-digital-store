@@ -1,36 +1,33 @@
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
 import pytest
 import pytest_asyncio
-import sys
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
-from decimal import Decimal
-
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
+from nexus_backend.ai_assistant.application.services import AssistantService
 from nexus_backend.ai_assistant.domain.ports import EmbeddingPort, LLMPort, VectorStorePort
-from nexus_backend.catalog.domain.entities import Product
+from nexus_backend.catalog.domain.entities import Genre, VideoGame
 from nexus_backend.main import app
 
 
 @pytest.fixture
 def mock_embedding_port() -> AsyncMock:
-    return AsyncMock(spec=EmbeddingPort)
+    port = AsyncMock(spec=EmbeddingPort)
+    port.embed_text.return_value = [0.1] * 384
+    return port
 
 
 @pytest.fixture
 def mock_llm_port() -> MagicMock:
     port = MagicMock()
-    
-    async def mock_generate_stream(system_prompt: str, user_message: str):
-        yield "Hello"
-        yield " "
-        yield "World"
-        
-    port.generate_stream.side_effect = mock_generate_stream
+
+    async def fake_stream(system_prompt: str, user_message: str):
+        yield "Recomiendo "
+        yield "Elden "
+        yield "Ring."
+
+    port.generate_stream = MagicMock(side_effect=fake_stream)
     return port
 
 
@@ -40,18 +37,30 @@ def mock_vector_store_port() -> AsyncMock:
 
 
 @pytest.fixture
-def dummy_product() -> Product:
-    return Product(
-        id=uuid4(),
-        name="RTX 4090",
-        brand="NVIDIA",
-        category="GPU",
-        description="Flagship graphics card",
-        price=Decimal("1599.99"),
-        stock=10,
-        specifications={"vram": "24GB"},
-        image_url="http://example.com/rtx4090.png",
-        embedding=[],
+def dummy_video_game() -> VideoGame:
+    return VideoGame(
+        id=UUID("77777777-7777-7777-7777-777777777777"),
+        title="Elden Ring",
+        description="Epic dark fantasy action RPG",
+        price_clp=39990,
+        stock=15,
+        genres=[Genre(id=UUID("88888888-8888-8888-8888-888888888888"), name="Soulslike")],
+        embedding=[0.1] * 384,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+
+@pytest.fixture
+def assistant_service(
+    mock_embedding_port: AsyncMock,
+    mock_llm_port: MagicMock,
+    mock_vector_store_port: AsyncMock,
+) -> AssistantService:
+    return AssistantService(
+        embedding_port=mock_embedding_port,
+        llm_port=mock_llm_port,
+        vector_store_port=mock_vector_store_port,
     )
 
 

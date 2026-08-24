@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator
 from typing import Protocol
 
-from nexus_backend.catalog.domain.entities import Product
+from nexus_backend.catalog.domain.entities import VideoGame
 
 
 class EmbeddingPort(Protocol):
@@ -17,4 +17,4 @@ class LLMPort(Protocol):
 class VectorStorePort(Protocol):
     async def similarity_search(
         self, embedding: list[float], top_k: int = 5,
-    ) -> list[Product]: ...
+    ) -> list[VideoGame]: ...

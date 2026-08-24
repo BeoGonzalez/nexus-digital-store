@@ -29,7 +29,8 @@ WORKDIR /app
 # Copiamos el entorno virtual (dependencias) desde el builder
 COPY --from=builder /app/.venv /app/.venv
 
-# Copiamos el código fuente de la aplicación
+# Copiamos el código fuente y manifiestos de la aplicación
+COPY pyproject.toml README.md ./
 COPY src /app/src
 
 # Exponemos el puerto de la API
@@ -39,4 +40,4 @@ EXPOSE 8000
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Comando de inicio
-CMD ["uv", "run", "uvicorn", "nexus_backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "nexus_backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

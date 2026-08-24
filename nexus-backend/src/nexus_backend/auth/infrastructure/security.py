@@ -1,20 +1,23 @@
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 import jwt
-from passlib.context import CryptContext
 
 from nexus_backend.config import get_settings
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _settings = get_settings()
 
 
 class PasslibPasswordHasher:
     def hash(self, plain: str) -> str:
-        return _pwd_context.hash(plain)
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(plain.encode("utf-8")[:72], salt).decode("utf-8")
 
     def verify(self, plain: str, hashed: str) -> bool:
-        return _pwd_context.verify(plain, hashed)
+        try:
+            return bcrypt.checkpw(plain.encode("utf-8")[:72], hashed.encode("utf-8"))
+        except Exception:
+            return False
 
 
 class JwtTokenIssuer:

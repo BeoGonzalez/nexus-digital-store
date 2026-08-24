@@ -1,7 +1,9 @@
+"""Pruebas de integración HTTP para los routers del Asistente IA (/api/v1/assistant)."""
+
+from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import AsyncClient
-from unittest.mock import AsyncMock
-import json
 
 from nexus_backend.ai_assistant.application.services import AssistantService
 from nexus_backend.ai_assistant.presentation.router import _get_assistant_service
@@ -9,41 +11,65 @@ from nexus_backend.main import app
 
 
 @pytest.fixture
-def mock_assistant_service() -> AsyncMock:
-    service = AsyncMock(spec=AssistantService)
-    
-    async def mock_chat_stream(query, chat_history):
-        yield f"data: {json.dumps({'type': 'token', 'data': 'Hello'})}\n\n"
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        
-    service.chat_stream = mock_chat_stream
+def mock_assistant_service() -> MagicMock:
+    service = MagicMock(spec=AssistantService)
+
+    async def fake_chat_stream(query: str, chat_history=None) -> AsyncIterator[str]:
+        yield 'data: {"type": "products", "data": []}\n\n'
+        yield 'data: {"type": "token", "data": "Hola"}\n\n'
+        yield 'data: {"type": "done"}\n\n'
+
+    service.chat_stream.side_effect = fake_chat_stream
     return service
 
 
 @pytest.fixture(autouse=True)
-def override_dependencies(mock_assistant_service: AsyncMock):
+def override_assistant_dependencies(mock_assistant_service: MagicMock):
     app.dependency_overrides[_get_assistant_service] = lambda: mock_assistant_service
     yield
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(_get_assistant_service, None)
 
 
-@pytest.mark.asyncio
-async def test_chat_endpoint_stream(async_client: AsyncClient, mock_assistant_service: AsyncMock):
-    # Arrange
-    payload = {
-        "query": "Hello",
-        "chat_history": []
-    }
+class TestAssistantRouterEndpoints:
+    """Suite de integración HTTP para los endpoints del Asistente IA."""
 
-    # Act
-    lines = []
-    async with async_client.stream("POST", "/api/v1/assistant/chat", json=payload) as response:
+    @pytest.mark.asyncio
+    async def test_chat_stream_endpoint_returns_streaming_response_200(
+        self,
+        async_client: AsyncClient,
+        mock_assistant_service: MagicMock,
+    ) -> None:
+        # Arrange
+        payload = {
+            "query": "¿Qué juegos me recomiendas?",
+            "chat_history": [{"role": "user", "content": "Hola"}],
+        }
+
+        # Act
+        response = await async_client.post("/api/v1/assistant/chat", json=payload)
+
+        # Assert
         assert response.status_code == 200
-        async for line in response.aiter_lines():
-            if line.strip():
-                lines.append(line)
+        assert "text/event-stream" in response.headers["content-type"]
+        assert response.headers.get("cache-control") == "no-cache"
 
-    # Assert
-    assert len(lines) == 2
-    assert "Hello" in lines[0]
-    assert "done" in lines[1]
+        # Validar el contenido del stream SSE consumido
+        content = response.text
+        assert "data: " in content
+        assert '"type": "products"' in content
+        assert '"type": "token"' in content
+        assert '"type": "done"' in content
+
+    @pytest.mark.asyncio
+    async def test_chat_stream_endpoint_validation_error_empty_query_returns_422(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        # Arrange: query vacía viola el min_length=1 de ChatRequest
+        invalid_payload = {"query": ""}
+
+        # Act
+        response = await async_client.post("/api/v1/assistant/chat", json=invalid_payload)
+
+        # Assert
+        assert response.status_code == 422

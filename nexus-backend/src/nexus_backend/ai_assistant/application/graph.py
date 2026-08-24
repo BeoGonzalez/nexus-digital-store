@@ -9,18 +9,18 @@ from nexus_backend.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """Eres el Shopping Assistant de Nexus Digital Store, una tienda de hardware gamer premium.
+SYSTEM_PROMPT = """Eres el Asistente de Ventas de Nexus Digital Store, una tienda premium de videojuegos.
 
 Tu rol:
-- Ayudar a los clientes a encontrar los mejores productos de hardware gamer.
-- Recomendar productos basándote EXCLUSIVAMENTE en el catálogo proporcionado.
-- Comparar especificaciones técnicas cuando el cliente lo pida.
+- Ayudar a los clientes a encontrar los mejores videojuegos.
+- Recomendar juegos basándote EXCLUSIVAMENTE en el catálogo proporcionado.
+- Explicar géneros o características del juego cuando el cliente lo pida.
 - Responder en el idioma del cliente (español o inglés).
 
 Reglas:
-- SOLO recomienda productos que aparezcan en el contexto proporcionado.
-- Si no hay productos relevantes, indica que no encontraste coincidencias y sugiere reformular la búsqueda.
-- Incluye precios y especificaciones clave en tus respuestas.
+- SOLO recomienda videojuegos que aparezcan en el contexto proporcionado.
+- Si no hay juegos relevantes, indica que no encontraste coincidencias y sugiere reformular la búsqueda.
+- Incluye precios (en CLP) y géneros en tus respuestas.
 - Sé conciso pero informativo.
 """
 
@@ -36,26 +36,25 @@ def build_rag_graph(
     async def retrieve(state: AssistantState) -> dict:
         query = state["query"]
         embedding = await embedding_port.embed_text(query)
-        products = await vector_store_port.similarity_search(
+        video_games = await vector_store_port.similarity_search(
             embedding, top_k=settings.VECTOR_SEARCH_TOP_K,
         )
 
         context_parts = []
-        for i, p in enumerate(products, 1):
-            specs = ", ".join(f"{k}: {v}" for k, v in p.specifications.items()) if p.specifications else "N/A"
+        for i, vg in enumerate(video_games, 1):
+            genres = ", ".join(g.name for g in vg.genres) if vg.genres else "N/A"
             context_parts.append(
-                f"{i}. {p.name} ({p.brand}) — ${p.price}\n"
-                f"   Categoría: {p.category}\n"
-                f"   {p.description}\n"
-                f"   Specs: {specs}\n"
-                f"   Stock: {p.stock} unidades"
+                f"{i}. {vg.title} — ${vg.price_clp} CLP\n"
+                f"   Géneros: {genres}\n"
+                f"   {vg.description}\n"
+                f"   Stock: {vg.stock} unidades"
             )
 
-        context = "\n\n".join(context_parts) if context_parts else "No se encontraron productos relevantes."
+        context = "\n\n".join(context_parts) if context_parts else "No se encontraron videojuegos relevantes."
 
-        logger.info("Retrieved %d products for query: %s", len(products), query[:80])
+        logger.info("Retrieved %d video games for query: %s", len(video_games), query[:80])
         return {
-            "retrieved_products": products,
+            "retrieved_products": video_games,
             "context": context,
         }
 
@@ -71,7 +70,7 @@ def build_rag_graph(
 
         user_message = (
             f"Historial de conversación:\n{history_text}\n\n"
-            f"Productos disponibles:\n{context}\n\n"
+            f"Videojuegos disponibles:\n{context}\n\n"
             f"Pregunta del cliente: {query}"
         )
 
