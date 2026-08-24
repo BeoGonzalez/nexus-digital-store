@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     APP_NAME: str = "Nexus Digital Store"
     DEBUG: bool = False
 
+    # Neon format: postgresql+asyncpg://<user>:<password>@<host>.neon.tech/<dbname>?ssl=require
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/nexus"
+    NEON_POOLED: bool = False  # True = usar endpoint -pooler de Neon (pgbouncer)
+    NEON_AUTH_URL: str = "https://ep-winter-dust-aylq45fu.neonauth.c-5.us-east-2.aws.neon.tech/neondb/auth"
 
     JWT_SECRET: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"

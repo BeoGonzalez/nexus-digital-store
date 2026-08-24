@@ -1,62 +1,32 @@
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends
 
-from nexus_backend.auth.application.dtos import (
-    LoginRequest,
-    RegisterRequest,
-    TokenResponse,
-    UserResponse,
-)
-from nexus_backend.auth.application.services import AuthService
+from nexus_backend.auth.application.dtos import AuthInfoResponse, UserResponse
 from nexus_backend.auth.domain.entities import User
-from nexus_backend.auth.infrastructure.repositories import SQLAlchemyUserRepository
-from nexus_backend.auth.infrastructure.security import JwtTokenIssuer, PasslibPasswordHasher
 from nexus_backend.auth.presentation.dependencies import get_current_user
-from nexus_backend.database import get_db_session
+from nexus_backend.config import get_settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+settings = get_settings()
 
 
-def _get_auth_service(session: AsyncSession = Depends(get_db_session)) -> AuthService:
-    return AuthService(
-        user_repo=SQLAlchemyUserRepository(session),
-        password_hasher=PasslibPasswordHasher(),
-        token_issuer=JwtTokenIssuer(),
+@router.get("/info", response_model=AuthInfoResponse)
+async def auth_info() -> AuthInfoResponse:
+    """Retorna los datos de conexión y endpoints de Neon Auth."""
+    return AuthInfoResponse(
+        neon_auth_url=settings.NEON_AUTH_URL,
+        message="Authentication and user management are strictly handled by Neon Auth.",
     )
-
-
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(
-    body: RegisterRequest,
-    service: AuthService = Depends(_get_auth_service),
-) -> UserResponse:
-    user = await service.register(
-        email=body.email,
-        password=body.password,
-        full_name=body.full_name,
-    )
-    return UserResponse(
-        id=str(user.id),
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active,
-    )
-
-
-@router.post("/login", response_model=TokenResponse)
-async def login(
-    body: LoginRequest,
-    service: AuthService = Depends(_get_auth_service),
-) -> TokenResponse:
-    token = await service.authenticate(email=body.email, password=body.password)
-    return TokenResponse(access_token=token)
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
+    """Obtiene los datos del usuario autenticado actual a partir de su sesión de Neon Auth."""
     return UserResponse(
         id=str(current_user.id),
+        name=current_user.name,
         email=current_user.email,
-        full_name=current_user.full_name,
+        role=current_user.role,
+        is_admin=current_user.is_admin,
         is_active=current_user.is_active,
+        image=current_user.image,
     )

@@ -42,21 +42,20 @@ class AssistantService:
         settings = get_settings()
 
         embedding = await self._embedding.embed_text(query)
-        products = await self._vector_store.similarity_search(
+        video_games = await self._vector_store.similarity_search(
             embedding, top_k=settings.VECTOR_SEARCH_TOP_K,
         )
 
         context_parts = []
-        for i, p in enumerate(products, 1):
-            specs = ", ".join(f"{k}: {v}" for k, v in p.specifications.items()) if p.specifications else "N/A"
+        for i, vg in enumerate(video_games, 1):
+            genres = ", ".join(g.name for g in vg.genres) if vg.genres else "N/A"
             context_parts.append(
-                f"{i}. {p.name} ({p.brand}) — ${p.price}\n"
-                f"   Categoría: {p.category}\n"
-                f"   {p.description}\n"
-                f"   Specs: {specs}\n"
-                f"   Stock: {p.stock} unidades"
+                f"{i}. {vg.title} — ${vg.price_clp} CLP\n"
+                f"   Géneros: {genres}\n"
+                f"   {vg.description}\n"
+                f"   Stock: {vg.stock} unidades"
             )
-        context = "\n\n".join(context_parts) if context_parts else "No se encontraron productos relevantes."
+        context = "\n\n".join(context_parts) if context_parts else "No se encontraron videojuegos relevantes."
 
         history_text = ""
         if chat_history:
@@ -65,13 +64,13 @@ class AssistantService:
 
         user_message = (
             f"Historial de conversación:\n{history_text}\n\n"
-            f"Productos disponibles:\n{context}\n\n"
+            f"Videojuegos disponibles:\n{context}\n\n"
             f"Pregunta del cliente: {query}"
         )
 
         product_data = [
-            {"id": str(p.id), "name": p.name, "price": str(p.price), "image_url": p.image_url}
-            for p in products
+            {"id": str(vg.id), "title": vg.title, "price_clp": str(vg.price_clp)}
+            for vg in video_games
         ]
         yield f"data: {json.dumps({'type': 'products', 'data': product_data})}\n\n"
 

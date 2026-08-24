@@ -7,14 +7,15 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      # Las variables pueden mapearse directamente o tomarse de un .env
-      - DATABASE_URL=postgresql+asyncpg://nexus:nexus123@db:5432/nexus_db
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
-      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-nexus-digital-store}
-      - SECRET_KEY=${SECRET_KEY:-super_secret_key_change_in_prod}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nexus:nexus123@db:5432/nexus_db}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-key-change-in-production}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGCHAIN_TRACING_V2=${LANGSMITH_TRACING:-true}
+      - LANGCHAIN_PROJECT=${LANGSMITH_PROJECT:-nexus-digital-store}
     volumes:
       # CRÍTICO: Persistencia del modelo de HuggingFace (~470MB) para evitar descargas en cada reinicio
       # Usamos el directorio home de root ya que es el usuario por defecto de la imagen de Python
@@ -53,6 +54,22 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  zap:
+    # OWASP ZAP (Zed Attack Proxy) para escaneo de vulnerabilidades
+    # Nota: ZAP escanea la API web, no la base de datos directamente, ya que busca inyecciones SQL y otros fallos a través de las rutas HTTP.
+    image: zaproxy/zap-stable:latest
+    container_name: nexus_zap_scanner
+    profiles:
+      - security
+    depends_on:
+      api:
+        condition: service_started
+    # Escaneo automatizado de API basado en el esquema OpenAPI/Swagger provisto por FastAPI
+    command: zap-api-scan.py -t http://api:8000/openapi.json -f openapi -r api_scan_report.html
+    volumes:
+      # Monta la carpeta local para guardar el reporte HTML
+      - ./zap-reports:/zap/wrk
 
 volumes:
   postgres_data:
