@@ -22,7 +22,12 @@ class OrderService:
     async def get_user_orders(self, user_id: UUID) -> list[Order]:
         return await self._order_repo.get_by_user_id(user_id)
 
-    async def create_order(self, user_id: UUID, request: CreateOrderRequest) -> Order:
+    async def create_order(self, user_id: UUID, request: CreateOrderRequest, idempotency_key: str | None = None) -> Order:
+        if idempotency_key:
+            existing_order = await self._order_repo.get_by_idempotency_key(idempotency_key)
+            if existing_order:
+                return existing_order
+
         if not request.items:
             raise BusinessRuleViolationException("Cannot create an empty order.")
 
@@ -56,7 +61,30 @@ class OrderService:
             user_id=user_id,
             items=order_items,
             status=OrderStatus.PENDING,
+            idempotency_key=idempotency_key,
         )
         order.calculate_total()
         
         return await self._order_repo.create(order)
+
+
+class PaymentMethodService:
+    def __init__(self, payment_repo: "PaymentMethodRepository") -> None:
+        self._payment_repo = payment_repo
+
+    async def get_user_payment_methods(self, user_id: UUID) -> list["PaymentMethod"]:
+        return await self._payment_repo.get_by_user_id(user_id)
+
+    async def add_payment_method(self, user_id: UUID, request: "CreatePaymentMethodRequest") -> "PaymentMethod":
+        from nexus_backend.orders.domain.entities import PaymentMethod
+        
+        # Simulamos que tomamos los últimos 4 dígitos reales de un token
+        last_4 = request.card_number[-4:] if len(request.card_number) >= 4 else "0000"
+        
+        pm = PaymentMethod(
+            user_id=user_id,
+            card_last_4=last_4,
+            card_brand=request.card_brand,
+            is_default=request.is_default,
+        )
+        return await self._payment_repo.create(pm)

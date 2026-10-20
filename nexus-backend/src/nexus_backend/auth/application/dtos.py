@@ -16,3 +16,18 @@ class UserResponse(BaseModel):
 class AuthInfoResponse(BaseModel):
     neon_auth_url: str
     message: str
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    token: str

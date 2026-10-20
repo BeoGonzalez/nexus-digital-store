@@ -58,11 +58,57 @@ async def get_user_orders(
     return [_to_response(o) for o in orders]
 
 
+from fastapi import Header
+
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def create_order(
     body: CreateOrderRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     service: OrderService = Depends(_get_order_service),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    order = await service.create_order(current_user.id, body)
+    order = await service.create_order(current_user.id, body, idempotency_key=idempotency_key)
     return _to_response(order)
+
+
+# ──────────────────────────────────────────────────────────────
+# Métodos de Pago
+# ──────────────────────────────────────────────────────────────
+
+from nexus_backend.orders.application.dtos import CreatePaymentMethodRequest, PaymentMethodResponse
+from nexus_backend.orders.application.services import PaymentMethodService
+from nexus_backend.orders.infrastructure.repositories import SQLAlchemyPaymentMethodRepository
+from nexus_backend.orders.domain.entities import PaymentMethod
+
+def _get_payment_service(session: AsyncSession = Depends(get_db_session)) -> PaymentMethodService:
+    repo = SQLAlchemyPaymentMethodRepository(session)
+    return PaymentMethodService(payment_repo=repo)
+
+
+def _to_payment_response(pm: PaymentMethod) -> PaymentMethodResponse:
+    return PaymentMethodResponse(
+        id=pm.id,
+        user_id=pm.user_id,
+        card_last_4=pm.card_last_4,
+        card_brand=pm.card_brand,
+        is_default=pm.is_default,
+    )
+
+
+@router.get("/payment-methods", response_model=list[PaymentMethodResponse])
+async def get_payment_methods(
+    service: PaymentMethodService = Depends(_get_payment_service),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    methods = await service.get_user_payment_methods(current_user.id)
+    return [_to_payment_response(pm) for pm in methods]
+
+
+@router.post("/payment-methods", response_model=PaymentMethodResponse, status_code=status.HTTP_201_CREATED)
+async def create_payment_method(
+    body: CreatePaymentMethodRequest,
+    service: PaymentMethodService = Depends(_get_payment_service),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    pm = await service.add_payment_method(current_user.id, body)
+    return _to_payment_response(pm)

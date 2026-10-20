@@ -10,11 +10,12 @@ from nexus_backend.catalog.application.dtos import (
     CreateVideoGameRequest,
     DeleteVideoGameResponse,
     GenreResponse,
+    PlatformResponse,
     UpdateVideoGameRequest,
     VideoGameResponse,
 )
 from nexus_backend.catalog.application.services import CatalogService
-from nexus_backend.catalog.domain.entities import VideoGame, Genre
+from nexus_backend.catalog.domain.entities import VideoGame, Genre, Platform
 from nexus_backend.catalog.infrastructure.repositories import SQLAlchemyVideoGameRepository
 from nexus_backend.database import get_db_session
 
@@ -33,6 +34,8 @@ def _to_response(game: VideoGame) -> VideoGameResponse:
         description=game.description,
         price_clp=game.price_clp,
         stock=game.stock,
+        image_url=game.image_url,
+        platform=PlatformResponse(id=game.platform.id, name=game.platform.name) if game.platform else None,
         genres=[GenreResponse(id=g.id, name=g.name) for g in game.genres],
         created_at=game.created_at if hasattr(game, "created_at") else None,
     )
@@ -84,6 +87,8 @@ async def create_video_game(
         description=body.description,
         price_clp=body.price_clp,
         stock=body.stock,
+        image_url=body.image_url,
+        platform=Platform(name=body.platform_name) if body.platform_name else None,
         genres=[Genre(name=g) for g in body.genre_names],
     )
     created_game = await service.create_video_game(game)

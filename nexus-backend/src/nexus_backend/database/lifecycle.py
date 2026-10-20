@@ -43,13 +43,6 @@ def _register_models() -> None:
     logger.info("Registered %d model modules", len(_MODEL_MODULES))
 
 
-async def _create_extensions(engine: AsyncEngine) -> None:
-    """Crea extensiones de Postgres requeridas."""
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    logger.info("PostgreSQL extensions verified")
-
-
 async def _create_schema(engine: AsyncEngine) -> None:
     """Genera tablas DDL a partir de Base.metadata."""
     from nexus_backend.shared.infrastructure.models import Base
@@ -69,7 +62,6 @@ async def init_db(
     Los usuarios y roles son gestionados exclusivamente por Neon Auth.
     """
     _register_models()
-    await _create_extensions(engine)
     await _create_schema(engine)
     logger.info("Database initialization complete (Auth managed by Neon Auth)")
 

@@ -1,7 +1,7 @@
 """Pruebas de integración HTTP para los routers del Asistente IA (/api/v1/assistant)."""
 
 from collections.abc import AsyncIterator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 import pytest
 from httpx import AsyncClient
 
@@ -14,7 +14,11 @@ from nexus_backend.main import app
 def mock_assistant_service() -> MagicMock:
     service = MagicMock(spec=AssistantService)
 
-    async def fake_chat_stream(query: str, chat_history=None) -> AsyncIterator[str]:
+    async def fake_chat_stream(
+        query: str,
+        chat_history=None,
+        session_id: str = "default-session",
+    ) -> AsyncIterator[str]:
         yield 'data: {"type": "products", "data": []}\n\n'
         yield 'data: {"type": "token", "data": "Hola"}\n\n'
         yield 'data: {"type": "done"}\n\n'
@@ -43,6 +47,7 @@ class TestAssistantRouterEndpoints:
         payload = {
             "query": "¿Qué juegos me recomiendas?",
             "chat_history": [{"role": "user", "content": "Hola"}],
+            "session_id": "test-session-123",
         }
 
         # Act
@@ -73,3 +78,17 @@ class TestAssistantRouterEndpoints:
 
         # Assert
         assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_clear_session_memory_endpoint_returns_200(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        # Act
+        response = await async_client.delete("/api/v1/assistant/session/user-session-abc")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "cleared"
+        assert data["session_id"] == "user-session-abc"

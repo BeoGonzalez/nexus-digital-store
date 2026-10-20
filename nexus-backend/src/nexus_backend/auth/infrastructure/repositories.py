@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nexus_backend.auth.domain.entities import User
@@ -23,7 +23,7 @@ class NeonAuthUserRepository:
 
     async def get_by_email(self, email: str) -> User | None:
         result = await self._session.execute(
-            select(NeonAuthUserModel).where(NeonAuthUserModel.email == email)
+            select(NeonAuthUserModel).where(func.lower(NeonAuthUserModel.email) == email.lower())
         )
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None

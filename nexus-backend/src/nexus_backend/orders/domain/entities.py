@@ -8,6 +8,21 @@ from nexus_backend.shared.domain.entities import BaseEntity
 from nexus_backend.catalog.domain.entities import VideoGame
 
 
+class PaymentMethodType(str, enum.Enum):
+    CREDIT_CARD = "CREDIT_CARD"
+    DEBIT_CARD = "DEBIT_CARD"
+    TRANSFER = "TRANSFER"
+
+
+@dataclass
+class PaymentMethod(BaseEntity):
+    user_id: UUID | None = None
+    method_type: PaymentMethodType = PaymentMethodType.CREDIT_CARD
+    card_last_4: str = ""
+    card_brand: str = ""
+    is_default: bool = False
+
+
 class OrderStatus(str, enum.Enum):
     """Estados válidos para una orden — dominio cerrado.
 
@@ -43,6 +58,7 @@ class Order(BaseEntity):
     user_id: UUID | None = None
     total_amount_clp: int = 0
     status: OrderStatus = OrderStatus.PENDING
+    idempotency_key: str | None = None
     items: list[OrderItem] = field(default_factory=list)
 
     def calculate_total(self) -> int:

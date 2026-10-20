@@ -14,7 +14,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-key-change-in-production}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
-      - LANGCHAIN_TRACING_V2=${LANGSMITH_TRACING:-true}
+      - LANGCHAIN_TRACING_V2=${LANGSMITH_TRACING:-false}
       - LANGCHAIN_PROJECT=${LANGSMITH_PROJECT:-nexus-digital-store}
     volumes:
       # CRÍTICO: Persistencia del modelo de HuggingFace (~470MB) para evitar descargas en cada reinicio
@@ -34,8 +34,8 @@ services:
     #           capabilities: [gpu]
 
   db:
-    # Imagen de PostgreSQL 16 con la extensión pgvector preinstalada (Requisito fundamental para búsquedas de similitud)
-    image: pgvector/pgvector:pg16
+    # PostgreSQL 16 estandar (búsquedas vectoriales delegadas a Pinecone)
+    image: postgres:16-alpine
     container_name: nexus_db
     restart: unless-stopped
     environment:
