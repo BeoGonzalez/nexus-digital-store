@@ -58,19 +58,27 @@ class AssistantService:
                 "(RPG, Acción, Terror, Estrategia, Carreras) o si buscas algo para jugar en solitario o con amigos."
             )
 
-        # 2. Preguntas sobre hambre / comida / sed
-        if any(w in q_lower for w in ("hambre", "comes", "comida", "almuerzo", "cena", "desayuno", "sed", "beber", "comer", "cocina", "receta")):
+        # 2. Sed y bebidas
+        if any(w in q_lower for w in ("sed", "beber", "bebida", "agua", "tomar")):
+            return (
+                "¡Jaja! Como inteligencia artificial no tengo cuerpo biológico ni garganta, así que no tengo sed ni necesito beber líquidos. "
+                "¡Mi única energía son los servidores y los buenos videojuegos! 🥤🎮\n\n"
+                "Pero tú mantente hidratado para esas partidas largas. ¿Qué juego te gustaría jugar hoy?"
+            )
+
+        # 3. Hambre, comida y recetas
+        if any(w in q_lower for w in ("hambre", "comes", "comida", "almuerzo", "cena", "desayuno", "comer", "cocina", "receta")):
             return (
                 "¡Jaja! Como inteligencia artificial no tengo cuerpo biológico ni estómago, así que no estoy relacionado con el hambre ni necesito comida humana. "
                 "¡Mi único combustible son los servidores, los gigabytes y los buenos videojuegos! 🍕🎮\n\n"
-                "Eso sí, si a ti te apasiona la gastronomía en el mundo gamer, hay simuladores culinarios increíbles como Overcooked o Chef RPG. "
-                "Y para acompañar tu snack, ¿qué tipo de juego te gustaría probar hoy?"
+                "Eso sí, si a ti te apasiona la gastronomía o comida en el mundo gamer, hay simuladores culinarios increíbles como Overcooked o Chef RPG. "
+                "Y para acompañar tu comida o snack, ¿qué tipo de juego te gustaría probar hoy?"
             )
 
-        # 3. Preguntas sobre el clima / meteorología
-        if any(w in q_lower for w in ("clima", "tiempo", "llueve", "temperatura", "frio", "calor", "soleado", "nublado", "pronostico", "meteorolog")):
+        # 4. Clima y meteorología
+        if any(w in q_lower for w in ("clima", "tiempo", "llov", "lluv", "temperatura", "frio", "calor", "soleado", "nublado", "pronostico", "meteorolog", "tormenta", "nieve")):
             return (
-                "No puedo ver el clima exterior ni tengo sensores meteorológicos para saber si llueve o hace calor en tu ciudad... ☀️🌧️\n\n"
+                "No puedo ver el clima exterior ni tengo sensores meteorológicos para saber si llueve, hace frío o hay sol en tu ciudad... ☀️🌧️\n\n"
                 "Pero desde la terminal de Nexus te puedo asegurar que cualquier clima es perfecto para quedarse jugando con el PC bien ventilado. "
                 "¿Buscas alguna recomendación de juego para pasar el día?"
             )
