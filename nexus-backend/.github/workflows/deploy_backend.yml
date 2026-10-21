@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ "main", "master" ]
     paths:
-      - 'backend/**'
+      - 'nexus-backend/**' # Ruta corregida
 
 jobs:
   deploy:
@@ -35,14 +35,7 @@ jobs:
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: pr-${{ github.event.pull_request.number }}
-        working-directory: ./backend
+        working-directory: ./nexus-backend # Directorio de trabajo corregido
         run: |
           docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
-      - name: Update Amazon ECS Service (Solo si aplica)
-        if: github.event_name == 'push'
-        run: |
-          aws ecs update-service --cluster $ECS_CLUSTER \
-                                 --service $ECS_SERVICE \
-                                 --force-new-deployment
