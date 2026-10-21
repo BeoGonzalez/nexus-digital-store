@@ -1,5 +1,5 @@
 import logging
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 from uuid import UUID
 
 from nexus_backend.catalog.application.dtos import UpdateVideoGameRequest
@@ -54,7 +54,11 @@ class CatalogService:
     async def search_by_vector(self, embedding: list[float], top_k: int = 5) -> list[VideoGame]:
         return await self._repo.search_by_vector(embedding, top_k=top_k)
 
-    async def sync_embeddings(self, embed_fn: Callable[[str], Awaitable[list[float]]]) -> int:
+    async def sync_embeddings(
+        self,
+        embed_fn: Callable[[str], Awaitable[list[float]]],
+        vector_store_adapter: Any = None,
+    ) -> int:
         games = await self._repo.get_without_embedding(limit=100)
         updated_count = 0
 
@@ -65,6 +69,13 @@ class CatalogService:
             embedding = await embed_fn(text_to_embed)
             game.embedding = embedding
             await self._repo.update(game)
+
+            if vector_store_adapter and hasattr(vector_store_adapter, "upsert_game"):
+                try:
+                    await vector_store_adapter.upsert_game(game, embedding)
+                except Exception as exc:
+                    logger.warning("Failed to upsert game %s to vector store: %s", game.id, exc)
+
             updated_count += 1
             logger.info("Generated embedding for video game %s", game.id)
 

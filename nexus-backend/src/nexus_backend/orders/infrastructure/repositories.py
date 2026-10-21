@@ -3,9 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from nexus_backend.orders.domain.entities import Order as OrderEntity, OrderItem as OrderItemEntity
-from nexus_backend.orders.domain.ports import OrderRepository
-from nexus_backend.orders.infrastructure.models import OrderModel, OrderItemModel
+from nexus_backend.orders.domain.entities import Order as OrderEntity, OrderItem as OrderItemEntity, PaymentMethod as PaymentMethodEntity
+from nexus_backend.orders.domain.ports import OrderRepository, PaymentMethodRepository
+from nexus_backend.orders.infrastructure.models import OrderModel, OrderItemModel, PaymentMethodModel
 from nexus_backend.catalog.domain.entities import VideoGame as VideoGameEntity, Genre as GenreEntity
 
 
@@ -25,7 +25,7 @@ class SQLAlchemyOrderRepository(OrderRepository):
                     description=vg_model.description,
                     price_clp=vg_model.price_clp,
                     stock=vg_model.stock,
-                    embedding=vg_model.embedding if vg_model.embedding is not None else [],
+                    embedding=getattr(vg_model, "embedding", []) or [],
                     genres=[GenreEntity(id=g.id, name=g.name) for g in vg_model.genres] if hasattr(vg_model, 'genres') else [],
                 )
             
@@ -45,6 +45,7 @@ class SQLAlchemyOrderRepository(OrderRepository):
             user_id=model.user_id,
             total_amount_clp=model.total_amount_clp,
             status=model.status,
+            idempotency_key=model.idempotency_key,
             items=items,
         )
 
@@ -67,11 +68,22 @@ class SQLAlchemyOrderRepository(OrderRepository):
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
+    async def get_by_idempotency_key(self, idempotency_key: str) -> OrderEntity | None:
+        stmt = (
+            select(OrderModel)
+            .where(OrderModel.idempotency_key == idempotency_key)
+            .options(selectinload(OrderModel.items).joinedload(OrderItemModel.video_game))
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
     async def create(self, order: OrderEntity) -> OrderEntity:
         model = OrderModel(
             user_id=order.user_id,
             total_amount_clp=order.total_amount_clp,
             status=order.status,
+            idempotency_key=order.idempotency_key,
             items=[
                 OrderItemModel(
                     video_game_id=item.video_game_id,
@@ -85,4 +97,36 @@ class SQLAlchemyOrderRepository(OrderRepository):
         await self._session.flush()
         
         # Reload to get the joined data
-        return await self.get_by_id(model.id)
+        created_order = await self.get_by_id(model.id)
+        if created_order is None:
+            return self._to_entity(model)
+        return created_order
+
+class SQLAlchemyPaymentMethodRepository(PaymentMethodRepository):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        
+    def _to_entity(self, model: PaymentMethodModel) -> PaymentMethodEntity:
+        return PaymentMethodEntity(
+            id=model.id,
+            user_id=model.user_id,
+            card_last_4=model.card_last_4,
+            card_brand=model.card_brand,
+            is_default=model.is_default
+        )
+
+    async def get_by_user_id(self, user_id: UUID) -> list[PaymentMethodEntity]:
+        stmt = select(PaymentMethodModel).where(PaymentMethodModel.user_id == user_id)
+        result = await self._session.execute(stmt)
+        return [self._to_entity(m) for m in result.scalars().all()]
+
+    async def create(self, payment_method: PaymentMethodEntity) -> PaymentMethodEntity:
+        model = PaymentMethodModel(
+            user_id=payment_method.user_id,
+            card_last_4=payment_method.card_last_4,
+            card_brand=payment_method.card_brand,
+            is_default=payment_method.is_default
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return self._to_entity(model)

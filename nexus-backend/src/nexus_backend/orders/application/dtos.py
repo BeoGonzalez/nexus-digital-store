@@ -13,6 +13,22 @@ class CreateOrderRequest(BaseModel):
     items: list[OrderItemRequest]
 
 
+class CreatePaymentMethodRequest(BaseModel):
+    card_number: str = Field(..., description="Número de tarjeta completo (simulado)")
+    card_brand: str = Field(..., description="Visa, Mastercard, AMEX, etc.")
+    is_default: bool = False
+
+
+class PaymentMethodResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    card_last_4: str
+    card_brand: str
+    is_default: bool
+
+    model_config = {"from_attributes": True}
+
+
 class OrderItemResponse(BaseModel):
     id: UUID
     video_game_id: UUID

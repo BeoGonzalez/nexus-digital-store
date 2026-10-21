@@ -13,6 +13,20 @@ from nexus_backend.catalog.domain.entities import VideoGame
 class TestAssistantService:
     """Suite de validación para la orquestación RAG y streaming del Asistente IA."""
 
+    @pytest.fixture(autouse=True)
+    def mock_crew_orchestration(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def fake_crew(*args, **kwargs):
+            return "Análisis estratégico simulado de CrewAI para tests."
+
+        monkeypatch.setattr(
+            "nexus_backend.ai_assistant.application.services.run_nexus_crew",
+            fake_crew,
+        )
+        monkeypatch.setattr(
+            "nexus_backend.ai_assistant.application.graph.run_nexus_crew",
+            fake_crew,
+        )
+
     @pytest.mark.asyncio
     async def test_chat_stream_assembles_context_and_validates_contract(
         self,
@@ -146,3 +160,81 @@ class TestAssistantService:
 
         # Assert
         assert response == "Recomiendo Elden Ring."
+
+    @pytest.mark.asyncio
+    async def test_chat_stream_memory_saver_multi_turn_persistence(
+        self,
+        assistant_service: AssistantService,
+        mock_embedding_port: AsyncMock,
+        mock_vector_store_port: AsyncMock,
+        mock_llm_port: MagicMock,
+        dummy_video_game: VideoGame,
+    ) -> None:
+        # Arrange
+        mock_embedding_port.embed_text.return_value = [0.1] * 384
+        mock_vector_store_port.similarity_search.return_value = [dummy_video_game]
+        session_id = "user-session-42"
+
+        # Turno 1: el usuario pregunta por Elden Ring
+        _ = [
+            chunk
+            async for chunk in assistant_service.chat_stream(
+                query="¿Tienen Elden Ring?",
+                chat_history=None,
+                session_id=session_id,
+            )
+        ]
+
+        # Turno 2: el usuario pregunta por el precio sin reenviar chat_history
+        _ = [
+            chunk
+            async for chunk in assistant_service.chat_stream(
+                query="¿Cuánto vale?",
+                chat_history=None,
+                session_id=session_id,
+            )
+        ]
+
+        # Assert - El LLM debe haber recibido en Turno 2 el historial recuperado de MemorySaver
+        _, called_user_message = mock_llm_port.generate_stream.call_args[0]
+        assert "user: ¿Tienen Elden Ring?" in called_user_message
+        assert "assistant: Recomiendo Elden Ring." in called_user_message
+        assert "Pregunta del cliente: ¿Cuánto vale?" in called_user_message
+
+    @pytest.mark.asyncio
+    async def test_chat_stream_memory_saver_session_isolation(
+        self,
+        assistant_service: AssistantService,
+        mock_embedding_port: AsyncMock,
+        mock_vector_store_port: AsyncMock,
+        mock_llm_port: MagicMock,
+        dummy_video_game: VideoGame,
+    ) -> None:
+        # Arrange
+        mock_embedding_port.embed_text.return_value = [0.1] * 384
+        mock_vector_store_port.similarity_search.return_value = [dummy_video_game]
+
+        # Sesión A habla de Dark Souls
+        _ = [
+            chunk
+            async for chunk in assistant_service.chat_stream(
+                query="Quiero Dark Souls",
+                chat_history=None,
+                session_id="session-user-A",
+            )
+        ]
+
+        # Sesión B hace una pregunta independiente
+        _ = [
+            chunk
+            async for chunk in assistant_service.chat_stream(
+                query="Quiero Mario Kart",
+                chat_history=None,
+                session_id="session-user-B",
+            )
+        ]
+
+        # Assert - La sesión B NO debe tener rastros de la conversación de la sesión A
+        _, called_user_message = mock_llm_port.generate_stream.call_args[0]
+        assert "Dark Souls" not in called_user_message
+        assert "Quiero Mario Kart" in called_user_message

@@ -1,0 +1,34 @@
+# Dependencias y Caché
+node_modules
+.pnpm-store
+
+# Artefactos de Compilación de Next.js
+.next
+out
+dist
+build
+tsconfig.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Entorno y Secretos locales
+.env*.local
+
+# Control de Versiones y Editores
+.git
+.gitignore
+.vscode
+.idea
+
+# Documentación interna / Guías de IA
+AGENTS.md
+CLAUDE.md
+
+# Archivos del Sistema Operativo
+.DS_Store
+Thumbs.db

@@ -30,7 +30,6 @@ class TestSQLAlchemyVideoGameRepository:
             description="Challenging action RPG",
             price_clp=29990,
             stock=12,
-            embedding=[0.5] * 384,
             genres=[genre_model],
             created_at=now,
             updated_at=now,
@@ -51,7 +50,7 @@ class TestSQLAlchemyVideoGameRepository:
         assert entity.description == "Challenging action RPG"
         assert entity.price_clp == 29990
         assert entity.stock == 12
-        assert entity.embedding == [0.5] * 384
+        assert entity.embedding == []
         assert len(entity.genres) == 1
         assert entity.genres[0].name == "Soulslike"
         assert entity.created_at == now

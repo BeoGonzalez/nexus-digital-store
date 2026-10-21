@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TypedDict
 
 from nexus_backend.catalog.domain.entities import VideoGame
@@ -12,7 +12,12 @@ class ChatMessage:
 
 class AssistantState(TypedDict, total=False):
     query: str
+    tenant_id: str
+    intent: str
+    decision_metrics: dict
     chat_history: list[ChatMessage]
     retrieved_products: list[VideoGame]
     context: str
+    external_context: str
+    crew_analysis: str
     response: str
