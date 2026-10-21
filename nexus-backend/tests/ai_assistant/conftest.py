@@ -70,3 +70,20 @@ async def async_client() -> AsyncClient:
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         yield client
+
+
+@pytest.fixture
+def mock_assistant_service() -> MagicMock:
+    service = MagicMock(spec=AssistantService)
+
+    async def fake_chat_stream(
+        query: str,
+        chat_history=None,
+        session_id: str = "default-session",
+    ):
+        yield 'data: {"type": "products", "data": []}\n\n'
+        yield 'data: {"type": "token", "data": "Hola"}\n\n'
+        yield 'data: {"type": "done"}\n\n'
+
+    service.chat_stream.side_effect = fake_chat_stream
+    return service
