@@ -1,12 +1,46 @@
+# Virtual environments
 .venv
+venv
+env
+ENV
+Lib
+Include
+Scripts
+pyvenv.cfg
+
+# Python bytecode & cache
 __pycache__
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .pytest_cache
 .coverage
 htmlcov
+.ruff_cache
+.mypy_cache
+
+# Secrets and environment configurations
+.env
+.env.*
+!.env.example
+
+# Development tools, tests & reports
 .git
+.gitignore
 .vscode
+.idea
 *.log
 zap-reports
+tests
+
+# Build and distribution artifacts
+build
+dist
+*.egg-info
+.eggs
+
+# OS temporary files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
