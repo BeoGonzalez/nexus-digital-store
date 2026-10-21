@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useVideoGamesQuery } from "@/application/hooks/useVideoGamesQuery";
+import { useAiAssistant } from "@/application/hooks/useAiAssistant";
 import { usePaymentMethodsQuery, useAddPaymentMethodMutation, useCreateOrderMutation } from "@/application/hooks/useOrderMutations";
 import { useLoginMutation, useRegisterMutation } from "@/application/hooks/useAuthMutations";
 import { VideoGame } from "@/domain/models";
@@ -290,9 +291,19 @@ export default function Page() {
   const [newCard, setNewCard] = useState({ number: "", brand: "Visa" });
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
-  const [chatHistory, setChatHistory] = useState<{sender: 'bot' | 'user', text: string}[]>([
-    { sender: 'bot', text: '¡Hola! Soy GammaBot. ¿Qué juego estás buscando en la terminal espacial hoy?' }
-  ]);
+  const {
+    messages: assistantMessages,
+    isLoading: assistantLoading,
+    sendMessage: sendAssistantMessage,
+    clearChat: clearAssistantChat,
+  } = useAiAssistant();
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [assistantMessages, assistantLoading]);
 
   useEffect(() => {
     if (paymentMethods.length > 0 && !selectedPaymentMethod) {
@@ -1094,8 +1105,11 @@ export default function Page() {
                   <ChatBotOrb />
                 </div>
                 <div>
-                  <h3 className="font-black text-white drop-shadow-[0_0_8px_rgba(139,92,246,0.8)]">GammaBot</h3>
-                  <p className="text-xs text-cyan-400">Red Neuronal Activa</p>
+                  <h3 className="font-black text-white drop-shadow-[0_0_8px_rgba(139,92,246,0.8)]">NexusBot AI</h3>
+                  <p className="text-xs text-cyan-400 flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
+                    Asesor Gamer Conectado
+                  </p>
                 </div>
               </div>
               <button 
@@ -1107,30 +1121,40 @@ export default function Page() {
             </div>
             
             {/* Chat History */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
-              {chatHistory.map((msg, i) => (
-                <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                    msg.sender === 'user' 
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3.5 flex flex-col">
+              {assistantMessages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                    msg.role === 'user' 
                       ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white font-medium rounded-br-sm shadow-[0_5px_15px_rgba(139,92,246,0.3)]' 
                       : 'bg-white/10 text-white rounded-bl-sm border border-white/5 shadow-[inset_0_1px_5px_rgba(255,255,255,0.05)]'
                   }`}>
-                    {msg.text}
+                    {msg.content || (assistantLoading && i === assistantMessages.length - 1 ? (
+                      <span className="flex items-center gap-2 text-cyan-300 animate-pulse text-xs">
+                        <Loader2 size={13} className="animate-spin" /> Consultando catálogo y asesor gamer...
+                      </span>
+                    ) : '')}
                   </div>
                 </div>
               ))}
+              {assistantLoading && assistantMessages.length > 0 && assistantMessages[assistantMessages.length - 1].content && (
+                <div className="flex justify-start">
+                  <div className="text-[11px] text-cyan-400/80 flex items-center gap-1.5 pl-2">
+                    <span className="inline-block size-1.5 rounded-full bg-cyan-400 animate-ping" />
+                    Escribiendo respuesta...
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Chat Input */}
             <form 
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!chatMessage.trim()) return;
-                setChatHistory(curr => [...curr, { sender: 'user', text: chatMessage }]);
+                if (!chatMessage.trim() || assistantLoading) return;
+                const textToSend = chatMessage;
                 setChatMessage("");
-                setTimeout(() => {
-                  setChatHistory(curr => [...curr, { sender: 'bot', text: 'Mi red neuronal aún se está calibrando en esta iteración. ¡Pero puedo sentir que quieres juegos increíbles!' }]);
-                }, 1000);
+                sendAssistantMessage(textToSend);
               }}
               className="p-4 border-t border-white/10 bg-black/40"
             >
@@ -1139,15 +1163,20 @@ export default function Page() {
                   type="text" 
                   value={chatMessage}
                   onChange={(e) => setChatMessage(e.target.value)}
-                  placeholder="Escribe tu mensaje..."
-                  className="w-full rounded-full border border-white/10 bg-black/40 py-3 pl-5 pr-12 text-sm text-white outline-none transition-all focus:border-cyan-500/50 focus:bg-white/5 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)] focus:shadow-[inset_0_2px_10px_rgba(0,0,0,0.8),0_0_15px_rgba(72,200,216,0.3)]"
+                  placeholder="Pregúntale a NexusBot sobre juegos..."
+                  disabled={assistantLoading}
+                  className="w-full rounded-full border border-white/10 bg-black/40 py-3 pl-5 pr-12 text-sm text-white outline-none transition-all focus:border-cyan-500/50 focus:bg-white/5 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)] focus:shadow-[inset_0_2px_10px_rgba(0,0,0,0.8),0_0_15px_rgba(72,200,216,0.3)] disabled:opacity-50"
                 />
                 <button 
                   type="submit"
-                  disabled={!chatMessage.trim()}
+                  disabled={!chatMessage.trim() || assistantLoading}
                   className="absolute right-2 flex size-8 items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 text-white transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-[0_0_10px_rgba(139,92,246,0.5)]"
                 >
-                  <Send size={14} className="-ml-0.5" />
+                  {assistantLoading ? (
+                    <Loader2 size={14} className="animate-spin text-white" />
+                  ) : (
+                    <Send size={14} className="-ml-0.5" />
+                  )}
                 </button>
               </div>
             </form>

@@ -22,6 +22,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logger.info("Starting %s...", settings.APP_NAME)
 
+    # ── LangSmith / LangChain Tracing V2 bootstrap ──
+    import os
+    if settings.LANGSMITH_API_KEY:
+        os.environ["LANGSMITH_API_KEY"] = settings.LANGSMITH_API_KEY
+        os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
+        os.environ["LANGSMITH_PROJECT"] = settings.LANGSMITH_PROJECT
+        os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
+        os.environ["LANGSMITH_TRACING"] = "true"
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+        logger.info("LangSmith & LangChain Tracing V2 connected for project '%s'", settings.LANGSMITH_PROJECT)
+
     # ── Database bootstrap (inyección explícita, 0 side-effects) ──
     from nexus_backend.database import (
         NeonConnectionConfig,

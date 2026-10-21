@@ -44,6 +44,108 @@ class AssistantService:
             decision_port,
         ).compile(checkpointer=self._checkpointer)
 
+    @staticmethod
+    def _build_contextual_fallback(query: str, video_games: list) -> str:
+        q_lower = query.lower().strip()
+        
+        # 1. Saludos e introducciones
+        greetings = ("hola", "buenas", "hey", "saludos", "que tal", "buenos dias", "buenas tardes", "buenas noches")
+        if any(g in q_lower for g in greetings) and len(q_lower.split()) <= 4:
+            return (
+                "¡Hola! Bienvenido a Nexus Digital Store. 🎮\n\n"
+                "Soy tu asesor gamer para encontrar videojuegos de PC. "
+                "¿Qué tipo de experiencia buscas hoy? Cuéntame sobre tus géneros predilectos "
+                "(RPG, Acción, Terror, Estrategia, Carreras) o si buscas algo para jugar en solitario o con amigos."
+            )
+
+        # 2. Preguntas sobre hambre / comida / sed
+        if any(w in q_lower for w in ("hambre", "comes", "comida", "almuerzo", "cena", "desayuno", "sed", "beber", "comer", "cocina", "receta")):
+            return (
+                "¡Jaja! Como inteligencia artificial no tengo cuerpo biológico ni estómago, así que no estoy relacionado con el hambre ni necesito comida humana. "
+                "¡Mi único combustible son los servidores, los gigabytes y los buenos videojuegos! 🍕🎮\n\n"
+                "Eso sí, si a ti te apasiona la gastronomía en el mundo gamer, hay simuladores culinarios increíbles como Overcooked o Chef RPG. "
+                "Y para acompañar tu snack, ¿qué tipo de juego te gustaría probar hoy?"
+            )
+
+        # 3. Preguntas sobre el clima / meteorología
+        if any(w in q_lower for w in ("clima", "tiempo", "llueve", "temperatura", "frio", "calor", "soleado", "nublado", "pronostico", "meteorolog")):
+            return (
+                "No puedo ver el clima exterior ni tengo sensores meteorológicos para saber si llueve o hace calor en tu ciudad... ☀️🌧️\n\n"
+                "Pero desde la terminal de Nexus te puedo asegurar que cualquier clima es perfecto para quedarse jugando con el PC bien ventilado. "
+                "¿Buscas alguna recomendación de juego para pasar el día?"
+            )
+
+        # 4. Autos, mecánica y reparación
+        if any(w in q_lower for w in ("auto", "coche", "carro", "mecanica", "motor", "rueda", "neumatico", "aceite", "reparar", "taller", "trafico")):
+            return (
+                "En cuanto a tu consulta sobre mecánica o vehículos del mundo real: como IA de Nexus no soy mecánico ni tengo un taller de reparación automotriz. "
+                "¡Donde sí soy experto es en la velocidad y el asfalto virtual! 🏎️💨\n\n"
+                "¿Te gustaría que busquemos algún simulador de carreras, rally o conducción para sentir la adrenalina de los motores en PC?"
+            )
+
+        # 5. Salud, medicina y síntomas
+        if any(w in q_lower for w in ("salud", "medico", "medicina", "pastilla", "enfermo", "dolor", "sintoma", "remedio", "farmacia", "hospital")):
+            return (
+                "Respecto a tu consulta de salud: soy un asistente virtual de videojuegos y no poseo formación médica ni puedo recetar medicamentos (¡aquí solo manejamos botiquines y pociones de salud en pantalla!). 💊❤️\n\n"
+                "Si no te sientes bien, por favor consulta a un profesional de la salud. Y para distraerte y descansar la mente, ¿hay algún juego relajante o aventura que te gustaría explorar?"
+            )
+
+        # 6. Tareas, matemáticas, física, colegio o universidad
+        if any(w in q_lower for w in ("tarea", "matematica", "calculo", "colegio", "universidad", "profesor", "examen", "fisica", "quimica")):
+            return (
+                "Sobre tu consulta de estudio o tareas académicas: mi base de conocimiento en Nexus está 100% orientada al catálogo y la cultura gamer de PC, así que no resuelvo deberes escolares ni ecuaciones. 📚🎮\n\n"
+                "¡Pero una vez que apruebes ese examen, aquí te espero para celebrarlo con una buena partida! ¿Qué juego tienes en la mira para jugar después?"
+            )
+
+        # 7. Política, elecciones y gobierno
+        if any(w in q_lower for w in ("politica", "presidente", "eleccion", "gobierno", "ley", "voto", "partido")):
+            return (
+                "En cuanto a temas políticos o de gobierno: en Nexus nos enfocamos pura y exclusivamente en el entretenimiento y los videojuegos, por lo que no tomo posturas ni analizo política del mundo real. 🏛️🎮\n\n"
+                "¡Las únicas batallas y estrategias que seguimos son dentro de los servidores de juego! ¿Te interesa algún juego de estrategia o táctica en el catálogo?"
+            )
+
+        # 8. Relaciones, amor o citas
+        if any(w in q_lower for w in ("amor", "novia", "novio", "pareja", "cita", "enamorado", "casarme", "sentimientos")):
+            return (
+                "Respecto a tu pregunta sobre relaciones o amor: como entidad virtual que reside en un servidor, no tengo vida romántica ni sentimientos biológicos. ❤️🤖\n\n"
+                "Mi verdadera devoción son los videojuegos épicos. Eso sí, tenemos títulos cooperativos increíbles para jugar en pareja o con amigos. ¿Buscas algún juego para dos?"
+            )
+
+        # 9. Cine, series o streaming
+        if any(w in q_lower for w in ("pelicula", "cine", "serie", "netflix", "streaming", "cancion", "musica", "album")):
+            return (
+                "Sobre entretenimiento de cine o música: en Nexus nos especializamos en videojuegos de PC y no contamos con catálogo de películas ni servicios de streaming. 🎬🎧\n\n"
+                "Aun así, muchísimos videojuegos tienen bandas sonoras y cinemáticas dignas de Hollywood. ¿Buscas algún juego con una historia cinematográfica profunda?"
+            )
+
+        # 2. Si se encontraron juegos relevantes en el catálogo
+        if video_games:
+            items_text = []
+            for vg in video_games[:3]:
+                stock_str = "Disponible" if vg.stock > 0 else "Sin stock temporalmente"
+                price_str = f"${vg.price_clp:,}".replace(",", ".")
+                items_text.append(f"• **{vg.title}** — {price_str} CLP ({stock_str})\n  {vg.description[:130]}...")
+            
+            joined_items = "\n".join(items_text)
+            return (
+                f"Respecto a lo que buscas sobre **\"{query}\"**, aquí tienes opciones muy recomendadas de nuestro catálogo:\n\n"
+                f"{joined_items}\n\n"
+                "¿Te gustaría conocer detalles sobre los requisitos, la historia o la jugabilidad de alguno de ellos?"
+            )
+
+        # 3. Preguntas sobre ofertas y precios
+        if any(w in q_lower for w in ("precio", "barato", "oferta", "descuento", "economico", "cuanto vale", "costo")):
+            return (
+                "En Nexus Digital Store tenemos un catálogo con precios competitivos en pesos chilenos (CLP). "
+                "¿Tienes algún presupuesto en mente o un género preferido (acción, rol, shooters) para recomendarte las opciones más convenientes?"
+            )
+
+        # 12. Fallback universal relativo al input específico del usuario
+        return (
+            f"Respecto a tu consulta sobre **\"{query}\"**: como asistente de Nexus Digital Store, mi conocimiento y funciones están enfocados exclusivamente en el mundo de los videojuegos de PC y el asesoramiento gamer, por lo que no puedo gestionar ese tema en el mundo exterior.\n\n"
+            "¡Pero si quieres sumergirte en una gran aventura interactiva, aquí estoy para recomendarte los mejores juegos! ¿Qué estilo o género te gustaría explorar hoy?"
+        )
+
     @traceable(name="assistant_chat")
     async def chat(
         self,
@@ -56,8 +158,17 @@ class AssistantService:
         if chat_history:
             state["chat_history"] = chat_history
 
-        result = await self._graph.ainvoke(state, config=config)
-        return result.get("response", "")
+        try:
+            result = await self._graph.ainvoke(state, config=config)
+            return result.get("response", "")
+        except Exception as e:
+            logger.warning("Graph ainvoke failed, returning contextual fallback: %s", e)
+            try:
+                embedding = await self._embedding.embed_text(query)
+                games = await self._vector_store.similarity_search(embedding, top_k=3)
+            except Exception:
+                games = []
+            return self._build_contextual_fallback(query, games)
 
     @traceable(name="assistant_chat_stream")
     async def chat_stream(
@@ -154,9 +265,15 @@ class AssistantService:
         yield f"data: {json.dumps({'type': 'products', 'data': product_data})}\n\n"
 
         accumulated_tokens: list[str] = []
-        async for chunk in self._llm.generate_stream(SYSTEM_PROMPT, user_message):
-            accumulated_tokens.append(chunk)
-            yield f"data: {json.dumps({'type': 'token', 'data': chunk})}\n\n"
+        try:
+            async for chunk in self._llm.generate_stream(SYSTEM_PROMPT, user_message):
+                accumulated_tokens.append(chunk)
+                yield f"data: {json.dumps({'type': 'token', 'data': chunk})}\n\n"
+        except Exception as e:
+            logger.warning("LLM generate_stream failed in chat_stream, yielding contextual fallback: %s", e)
+            fallback_text = self._build_contextual_fallback(query, video_games)
+            accumulated_tokens.append(fallback_text)
+            yield f"data: {json.dumps({'type': 'token', 'data': fallback_text})}\n\n"
 
         # Persistir el turno generado en MemorySaver
         full_response = "".join(accumulated_tokens)
