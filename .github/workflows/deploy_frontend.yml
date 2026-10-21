@@ -3,12 +3,8 @@ name: CI/CD Frontend - Push & PR
 on:
   push:
     branches: [ "main", "master" ]
-    paths:
-      - 'nexus-frontend/**'
   pull_request:
     branches: [ "main", "master" ]
-    paths:
-      - 'nexus-frontend/**'
 
 jobs:
   deploy:
