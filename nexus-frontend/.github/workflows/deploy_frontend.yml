@@ -1,23 +1,23 @@
-name: CI/CD Frontend - Push & PR
+name: CI/CD Backend - Push & PR
 
 on:
   push:
     branches: [ "main", "master" ]
     paths:
-      - 'nexus-frontend/**'
+      - 'nexus-backend/**'
   pull_request:
     branches: [ "main", "master" ]
     paths:
-      - 'nexus-frontend/**'
+      - 'nexus-backend/**'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: us-east-1
-      ECR_REPOSITORY: nexus-frontend
+      ECR_REPOSITORY: nexus-backend
       ECS_CLUSTER: nexus-ecs-cluster
-      ECS_SERVICE: nexus-service-frontend
+      ECS_SERVICE: nexus-service-backend
 
     steps:
       - name: Checkout code
@@ -40,7 +40,7 @@ jobs:
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: pr-${{ github.event.pull_request.number }}
-        working-directory: ./nexus-frontend
+        working-directory: ./nexus-backend
         run: |
           docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
@@ -50,7 +50,7 @@ jobs:
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: latest
-        working-directory: ./nexus-frontend
+        working-directory: ./nexus-backend
         run: |
           docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
