@@ -1,7 +1,7 @@
-name: Deploy Frontend to ECR and ECS
+name: CI Frontend - Build & Test PR
 
 on:
-  push:
+  pull_request:
     branches: [ "main", "master" ]
     paths:
       - 'frontend/**'
@@ -13,7 +13,7 @@ jobs:
       AWS_REGION: us-east-1
       ECR_REPOSITORY: nexus-frontend
       ECS_CLUSTER: nexus-ecs-cluster
-      ECS_SERVICE: nexus-service-frontend # (Asegúrate de poner aquí el nombre exacto del servicio ECS de frontend cuando lo crees)
+      ECS_SERVICE: nexus-service-frontend
 
     steps:
       - name: Checkout code
@@ -31,16 +31,17 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Build and push image to Amazon ECR (PR Validation)
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: latest
+          IMAGE_TAG: pr-${{ github.event.pull_request.number }}
         working-directory: ./frontend
         run: |
           docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      - name: Update Amazon ECS Service
+      - name: Update Amazon ECS Service (Solo si aplica)
+        if: github.event_name == 'push' # Se ejecuta solo al hacer merge, o puedes quitarlo si deseas forzarlo
         run: |
           aws ecs update-service --cluster $ECS_CLUSTER \
                                  --service $ECS_SERVICE \
