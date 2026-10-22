@@ -62,7 +62,8 @@ class TavilyNewsAdapter(GamingNewsPort):
         if not query or not query.strip():
             return "Sin noticias externas."
 
-        search_query = f"{query.strip()} noticias videojuegos lanzamientos parches"
+        clean_topic = query.strip()
+        search_query = f"{clean_topic} noticias parches novedades videojuegos"
 
         payload: dict[str, Any] = {
             "api_key": self._api_key,
@@ -76,7 +77,7 @@ class TavilyNewsAdapter(GamingNewsPort):
         try:
             if self._client:
                 return await self._fetch_with_client(self._client, payload)
-            async with httpx.AsyncClient(timeout=4.0) as client:
+            async with httpx.AsyncClient(timeout=8.0) as client:
                 return await self._fetch_with_client(client, payload)
         except Exception as exc:
             logger.debug("Fallo al consultar Tavily API para '%s': %s", query, exc)

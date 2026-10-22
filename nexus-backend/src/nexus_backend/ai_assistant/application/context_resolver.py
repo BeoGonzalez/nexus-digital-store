@@ -229,13 +229,52 @@ class ResolvedTarget:
     source: str = "unknown"        # 'query_alias', 'query_candidate', 'history', 'clean_regex', 'top_candidate'
 
 
+# Catálogo referencial de juegos populares fuera de catálogo para análisis de noticias y lore
+POPULAR_EXTERNAL_GAMES: dict[str, str] = {
+    "league of legends": "League of Legends",
+    "lol": "League of Legends",
+    "valorant": "Valorant",
+    "fortnite": "Fortnite",
+    "counter strike 2": "Counter-Strike 2",
+    "counter-strike 2": "Counter-Strike 2",
+    "counter strike": "Counter-Strike 2",
+    "cs2": "Counter-Strike 2",
+    "cs 2": "Counter-Strike 2",
+    "minecraft": "Minecraft",
+    "dota 2": "Dota 2",
+    "dota": "Dota 2",
+    "apex legends": "Apex Legends",
+    "apex": "Apex Legends",
+    "world of warcraft": "World of Warcraft",
+    "wow": "World of Warcraft",
+    "genshin impact": "Genshin Impact",
+    "genshin": "Genshin Impact",
+    "roblox": "Roblox",
+    "overwatch 2": "Overwatch 2",
+    "overwatch": "Overwatch 2",
+    "gta 6": "Grand Theft Auto VI",
+    "gta vi": "Grand Theft Auto VI",
+    "hogwarts legacy": "Hogwarts Legacy",
+    "starfield": "Starfield",
+    "diablo iv": "Diablo IV",
+    "diablo 4": "Diablo IV",
+    "call of duty": "Call of Duty",
+    "warzone": "Call of Duty: Warzone",
+}
+
+
 _INTENT_STRIP_REGEX = re.compile(
-    r"(?i)\b(a cuanto esta|a cuánto está|cuanto cuesta|cuánto cuesta|cuanto sale|cuánto sale|"
+    r"(?i)\b("
+    r"a cuanto esta|a cuánto está|cuanto cuesta|cuánto cuesta|cuanto sale|cuánto sale|"
     r"a como esta|a cómo está|precio de|precios de|ofertas de|oferta de|en otras tiendas|"
-    r"en steam|en epic games|en epic|en gog|en humble|juego|videojuego|noticias de|parches de|"
+    r"en steam|en epic games|en epic|en gog|en humble|juego|videojuego|"
+    r"noticias actuales de|noticias recientes de|ultimas noticias de|últimas noticias de|"
+    r"noticias de|noticias sobre|novedades de|novedades sobre|actualizaciones de|"
+    r"parches recientes de|parches de|actualidad de|actualidad del|"
     r"dime sobre|informacion de|información de|cuentame de|cuéntame de|recomiendame|recomiéndame|"
     r"comparar precios de|comparativa de|comparar|compara|tienen stock de|tienen|hay stock de|"
-    r"stock de|hablame de|háblame de|que tal es|qué tal es|quiero comprar|cotizacion de|cotización de)\b"
+    r"stock de|hablame de|háblame de|que tal es|qué tal es|quiero comprar|cotizacion de|cotización de|"
+    r"que sabes de|qué sabes de|sabes de|sabes algo de|dime que hay de|dime qué hay de)\b"
 )
 
 _FOLLOW_UP_TRIGGERS = (
@@ -266,12 +305,13 @@ def resolve_target_game(
     
     Aplica una cascada de resolución:
       1. Coincidencia directa en la consulta con alias del catálogo Nexus.
-      2. Coincidencia con títulos de candidatos pasados (e.g. Pinecone).
-      3. Anáfora / Historial conversacional: Si la consulta es un follow-up sin título,
+      2. Coincidencia con juegos populares externos (League of Legends, Valorant, etc.).
+      3. Coincidencia con títulos de candidatos pasados (e.g. Pinecone).
+      4. Anáfora / Historial conversacional: Si la consulta es un follow-up sin título,
          busca en los turnos previos de chat_history.
-      4. Limpieza regex de expresiones interrogativas para rescatar títulos externos.
-      5. Si es consulta general ("recomiéndame juegos"), marca flag de recomendación.
-      6. Fallback al mejor candidato disponible.
+      5. Limpieza regex de expresiones interrogativas para rescatar títulos externos.
+      6. Si es consulta general ("recomiéndame juegos"), marca flag de recomendación.
+      7. Fallback al mejor candidato disponible.
     """
     q_norm = f" {_normalize(query)} "
     candidates = candidates or []
@@ -290,6 +330,19 @@ def resolve_target_game(
                     canonical_game=kg,
                     source="query_alias",
                 )
+
+    # 2. Coincidencia con franquicias y juegos populares de la industria externa
+    for ext_alias, ext_title in sorted(POPULAR_EXTERNAL_GAMES.items(), key=lambda x: len(x[0]), reverse=True):
+        ext_norm = f" {_normalize(ext_alias)} "
+        if ext_norm in q_norm or ext_alias in query.lower():
+            return ResolvedTarget(
+                title=ext_title,
+                catalog_title=ext_title,
+                price_clp=0,
+                stock=0,
+                is_in_catalog=False,
+                source="popular_external",
+            )
 
     # 2. Coincidencia contra candidatos de Pinecone / DB
     for vg in candidates:
