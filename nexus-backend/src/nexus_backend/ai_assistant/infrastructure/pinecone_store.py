@@ -2,7 +2,10 @@ import asyncio
 import logging
 from uuid import UUID, uuid4
 
-from pinecone import Pinecone
+try:
+    from pinecone import Pinecone
+except ImportError:
+    Pinecone = None
 
 from nexus_backend.ai_assistant.domain.ports import VectorStorePort
 from nexus_backend.catalog.domain.entities import Genre, VideoGame

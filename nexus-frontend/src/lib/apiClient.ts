@@ -1,7 +1,5 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const NEON_AUTH_URL = "https://ep-winter-dust-aylq45fu.neonauth.c-5.us-east-2.aws.neon.tech/neondb/auth";
-
 export const apiClient = {
   async getGames() {
     const res = await fetch(`${API_URL}/api/v1/video-games`, {
@@ -108,29 +106,29 @@ export const apiClient = {
 
   auth: {
     async register(email: string, password: string, name: string) {
-      const res = await fetch(`${NEON_AUTH_URL}/sign-up/email`, {
+      const res = await fetch(`${API_URL}/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, name })
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || data.error?.message || "Error al registrar usuario");
+        throw new Error(data.detail || data.message || "Error al registrar usuario en Cognito");
       }
       return data;
     },
 
     async login(email: string, password: string) {
-      const res = await fetch(`${NEON_AUTH_URL}/sign-in/email`, {
+      const res = await fetch(`${API_URL}/api/v1/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || data.error?.message || "Credenciales inválidas");
+        throw new Error(data.detail || data.message || "Credenciales inválidas en Cognito");
       }
-      return data; // Contiene .user y .session en better-auth
+      return data;
     }
   }
 };

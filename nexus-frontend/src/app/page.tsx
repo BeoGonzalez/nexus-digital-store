@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, type MouseEvent, type ChangeEvent, type FormEvent, type ReactNode, type SyntheticEvent } from "react";
 import { useVideoGamesQuery } from "@/application/hooks/useVideoGamesQuery";
 import { useAiAssistant } from "@/application/hooks/useAiAssistant";
 import { usePaymentMethodsQuery, useAddPaymentMethodMutation, useCreateOrderMutation } from "@/application/hooks/useOrderMutations";
@@ -61,7 +61,7 @@ function Logo() {
         src="/logo.png" 
         alt="Gamma Terminal Logo" 
         className="h-10 sm:h-14 w-auto object-contain drop-shadow-[0_0_15px_rgba(72,200,216,0.3)] transition-all duration-300 group-hover:drop-shadow-[0_0_25px_rgba(255,69,0,0.4)] group-hover:scale-105" 
-        onError={(e) => {
+        onError={(e: SyntheticEvent<HTMLImageElement, Event>) => {
           // Fallback en caso de que la imagen no esté en public/logo.png
           e.currentTarget.style.display = 'none';
           e.currentTarget.nextElementSibling?.classList.remove('hidden');
@@ -119,7 +119,7 @@ function ProductCard({
   const cardRef = useRef<HTMLElement>(null);
   const glowRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+  const handleMouseMove = (e: MouseEvent<HTMLElement>) => {
     if (!cardRef.current || !glowRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -219,7 +219,7 @@ function Overlay({
   onClose,
   wide = false,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onClose: () => void;
   wide?: boolean;
 }) {
@@ -234,7 +234,7 @@ function Overlay({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      onMouseDown={(event: MouseEvent<HTMLDivElement>) => event.target === event.currentTarget && onClose()}
     >
       <div
         className={`relative max-h-[92vh] w-full overflow-auto rounded-3xl border border-white/10 bg-black/60 backdrop-blur-2xl p-6 shadow-[inset_0_2px_20px_rgba(255,255,255,0.05),0_0_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200 ${wide ? "max-w-3xl" : "max-w-lg"}`}
@@ -264,7 +264,7 @@ export default function Page() {
   const [complete, setComplete] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
-  const [user, setUser] = useState<{name?: string; email?: string; role?: string} | null>(null);
+  const [user, setUser] = useState<{name?: string; email?: string; role?: string; is_admin?: boolean} | null>(null);
   const loggedIn = !!user;
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -275,8 +275,20 @@ export default function Page() {
 
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
-    setToken(localStorage.getItem("nexus_token"));
-  }, [loggedIn]);
+    const savedToken = localStorage.getItem("nexus_token");
+    setToken(savedToken);
+    if (savedToken) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      fetch(`${apiUrl}/api/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${savedToken}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((userData) => {
+          if (userData) setUser(userData);
+        })
+        .catch((err) => console.error("Error al restaurar perfil Cognito:", err));
+    }
+  }, []);
 
   const { data: catalog = [], isLoading: catalogLoading } = useVideoGamesQuery();
   const { data: paymentMethods = [], isLoading: loadingPayments } = usePaymentMethodsQuery(token);
@@ -319,8 +331,8 @@ export default function Page() {
     return filtered;
   }, [catalog, query]);
 
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const total = cart.reduce((sum, item) => sum + (item.price_clp || 0) * item.quantity, 0);
+  const cartCount = cart.reduce((sum: number, item: CartLine) => sum + item.quantity, 0);
+  const total = cart.reduce((sum: number, item: CartLine) => sum + (item.price_clp || 0) * item.quantity, 0);
 
   function showToast(message: string) {
     setToastMessage(message);
@@ -328,10 +340,10 @@ export default function Page() {
   }
 
   function addToCart(product: Product) {
-    setCart((current) => {
-      const existing = current.find((item) => item.id === product.id);
+    setCart((current: CartLine[]) => {
+      const existing = current.find((item: CartLine) => item.id === product.id);
       return existing
-        ? current.map((item) =>
+        ? current.map((item: CartLine) =>
             item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
           )
         : [...current, { ...product, cartId: Date.now().toString(), quantity: 1 }];
@@ -341,12 +353,12 @@ export default function Page() {
   }
 
   function updateQuantity(cartId: string, delta: number) {
-    setCart((current) =>
+    setCart((current: CartLine[]) =>
       current
-        .map((item) =>
+        .map((item: CartLine) =>
           item.cartId === cartId ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
         )
-        .filter((item) => item.quantity > 0)
+        .filter((item: CartLine) => item.quantity > 0)
     );
   }
 
@@ -365,7 +377,7 @@ export default function Page() {
           
           <form
             className="group/search ml-auto flex min-w-0 flex-1 max-w-[600px] items-center rounded-full border border-white/10 bg-black/60 backdrop-blur-md px-4 py-2 sm:px-5 sm:py-2.5 shadow-[inset_0_4px_20px_rgba(0,0,0,0.8)] transition-all duration-300 hover:border-cyan-500/30 focus-within:border-cyan-400 focus-within:bg-black/90 focus-within:shadow-[inset_0_4px_25px_rgba(0,0,0,1),0_0_25px_rgba(6,182,212,0.4)]"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={(e: FormEvent<HTMLFormElement>) => e.preventDefault()}
           >
             <div className="relative flex items-center justify-center mr-3 shrink-0">
               <Search className="text-cyan-500 transition-all duration-300 group-focus-within/search:text-cyan-300 group-focus-within/search:drop-shadow-[0_0_8px_rgba(6,182,212,1)]" size={18} />
@@ -374,7 +386,7 @@ export default function Page() {
             <input
               aria-label="Buscar productos"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
               placeholder="Analizar base de datos estelar..."
               className="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600 font-mono tracking-wide selection:bg-cyan-500/40"
             />
@@ -388,7 +400,7 @@ export default function Page() {
           </form>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto sm:ml-0">
-            {loggedIn && user?.email === "admin@nexus.com" && (
+            {loggedIn && (user?.is_admin || user?.role === "admin" || user?.email === "admin@nexus.com") && (
               <Link
                 href="/admin"
                 aria-label="Panel de Administración"
@@ -433,7 +445,7 @@ export default function Page() {
                 <button
                   className="flex w-full items-center justify-between text-base font-bold capitalize text-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#48c8d8] rounded-md"
                   onClick={() =>
-                    setOpen((state) => ({
+                    setOpen((state: typeof open) => ({
                       ...state,
                       [key]: !state[key as keyof typeof state],
                     }))
@@ -576,7 +588,20 @@ export default function Page() {
                     const response = await loginMutation.mutateAsync({ email, password });
                     if (response?.token) {
                       setToken(response.token);
-                      setUser({ email, name: email.split("@")[0] });
+                      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                      try {
+                        const meRes = await fetch(`${apiUrl}/api/v1/auth/me`, {
+                          headers: { Authorization: `Bearer ${response.token}` },
+                        });
+                        if (meRes.ok) {
+                          const meData = await meRes.json();
+                          setUser(meData);
+                        } else {
+                          setUser({ email, name: email.split("@")[0] });
+                        }
+                      } catch {
+                        setUser({ email, name: email.split("@")[0] });
+                      }
                       showToast(`Bienvenido a Gamma`);
                       setLoginOpen(false);
                     }

@@ -26,11 +26,14 @@ flowchart TB
         end
     end
 
-    subgraph Infrastructure ["Infraestructura & Almacenamiento"]
-        NeonDB[("🐘 Neon Cloud PostgreSQL\n(Auth, Órdenes, Catálogo Relacional)")]
+    subgraph Infrastructure ["Infraestructura & Almacenamiento (AWS Cloud)"]
+        AuroraDB[("🐘 Amazon Aurora PostgreSQL\n(Órdenes, Catálogo Relacional)")]
+        Cognito["🔑 Amazon Cognito\n(User Pool / JWT Auth)"]
         Pinecone[("🌲 Pinecone Vector DB\n(Embeddings MiniLM-L12, Namespace Multitenant)")]
         Groq["⚡ Groq LPU Cloud\n(Inferencia Ultrarrápida — gpt-oss-20b)"]
         Wiki["📚 Wikipedia API\n(Enriquecimiento de Lore & Trivia Gamer)"]
+        Tavily["📰 Tavily AI Search API\n(Noticias, Parches y Novedades Gamer)"]
+        CheapShark["🏷️ CheapShark API\n(Comparativa de Precios: Steam, Epic, GOG)"]
     end
 
     Storefront -->|REST / SSE Streaming| Router
@@ -40,8 +43,11 @@ flowchart TB
     AI_Pipeline --> Laya
     AI_Pipeline --> LangGraph
     LangGraph --> CrewAI
+    LangGraph --> Tavily
+    LangGraph --> CheapShark
     Services --> Pinecone
-    Services --> NeonDB
+    Services --> AuroraDB
+    Router -.->|JWT Bearer Validation| Cognito
     CrewAI --> Groq
 ```
 
@@ -92,6 +98,8 @@ nexus/
 2. **System 2 (Razonamiento Multi-Agente & RAG)**:  
    - **Vector DB**: Búsqueda semántica de catálogo en **Pinecone** (índice `nexus-catalog`, dimensión 384, espacio multitenant `nexus_chile`).
    - **Trivia Gamer**: Inyección de contexto histórico y curiosidades vía **Wikipedia API**.
+   - **Noticias & Actualidad Gamer**: Búsqueda de parches, anuncios y lanzamientos vía **Tavily AI Search API**.
+   - **Comparador de Precios Externos**: Análisis en tiempo real de ofertas en tiendas de PC (Steam, Epic Games Store, GOG, Humble Store, etc.) vía **CheapShark API**, con conversión a pesos chilenos ($ CLP) y dictamen explícito de ahorro frente a Nexus Digital Store.
    - **CrewAI**: Tres agentes autónomos colaboran en cadena:
      - *Catalog & Inventory Analyst*: Valida stock y disponibilidad real.
      - *Gaming Culture Researcher*: Conecta el lore del título con los intereses del usuario.

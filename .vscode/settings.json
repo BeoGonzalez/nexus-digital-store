@@ -1,0 +1,16 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/nexus-backend/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/nexus-backend/src",
+    "${workspaceFolder}/nexus-backend"
+  ],
+  "python.autoComplete.extraPaths": [
+    "${workspaceFolder}/nexus-backend/src",
+    "${workspaceFolder}/nexus-backend"
+  ],
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    "nexus-backend/tests"
+  ]
+}
+

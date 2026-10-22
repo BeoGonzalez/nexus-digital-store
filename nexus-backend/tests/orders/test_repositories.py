@@ -21,7 +21,7 @@ class TestSQLAlchemyOrderRepository:
         repo = SQLAlchemyOrderRepository(mock_session)
 
         order_id = uuid4()
-        user_id = uuid4()
+        user_id = str(uuid4())
         game_id = uuid4()
         now = datetime.now(timezone.utc)
 

@@ -16,7 +16,7 @@ class PaymentMethodType(str, enum.Enum):
 
 @dataclass
 class PaymentMethod(BaseEntity):
-    user_id: UUID | None = None
+    user_id: str | None = None
     method_type: PaymentMethodType = PaymentMethodType.CREDIT_CARD
     card_last_4: str = ""
     card_brand: str = ""
@@ -55,7 +55,7 @@ class OrderItem(BaseEntity):
 
 @dataclass
 class Order(BaseEntity):
-    user_id: UUID | None = None
+    user_id: str | None = None
     total_amount_clp: int = 0
     status: OrderStatus = OrderStatus.PENDING
     idempotency_key: str | None = None

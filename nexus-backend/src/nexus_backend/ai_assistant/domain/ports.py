@@ -26,6 +26,16 @@ class ExternalKnowledgePort(Protocol):
     async def fetch_trivia(self, topic: str) -> str: ...
 
 
+class GamingNewsPort(Protocol):
+    async def fetch_news(self, query: str) -> str: ...
+
+
+class PriceComparisonPort(Protocol):
+    async def compare_price(
+        self, game_title: str, nexus_price_clp: int
+    ) -> dict: ...
+
+
 class DecisionEnginePort(Protocol):
     async def classify_intent(self, query: str) -> str: ...
 

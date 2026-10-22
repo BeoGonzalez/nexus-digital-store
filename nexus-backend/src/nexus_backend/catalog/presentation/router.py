@@ -67,7 +67,7 @@ async def get_video_game(
 
 
 # ──────────────────────────────────────────────────────────────
-# Rutas Administrativas Protegidas por RBAC (Neon Auth Admin)
+# Rutas Administrativas Protegidas por RBAC (Cognito Admin)
 # ──────────────────────────────────────────────────────────────
 
 @router.post(
@@ -81,7 +81,7 @@ async def create_video_game(
     service: CatalogService = Depends(_get_catalog_service),
     current_admin: User = Depends(require_admin),
 ) -> Any:
-    """Crea un nuevo videojuego en el catálogo. Requiere rol 'admin' en Neon Auth."""
+    """Crea un nuevo videojuego en el catálogo. Requiere rol 'admin'."""
     game = VideoGame(
         title=body.title,
         description=body.description,
@@ -106,7 +106,7 @@ async def update_video_game(
     service: CatalogService = Depends(_get_catalog_service),
     current_admin: User = Depends(require_admin),
 ) -> Any:
-    """Actualiza los datos o stock de un videojuego. Requiere rol 'admin' en Neon Auth."""
+    """Actualiza los datos o stock de un videojuego. Requiere rol 'admin'."""
     updated_game = await service.update_video_game(video_game_id, body)
     return _to_response(updated_game)
 
@@ -121,7 +121,7 @@ async def delete_video_game(
     service: CatalogService = Depends(_get_catalog_service),
     current_admin: User = Depends(require_admin),
 ) -> Any:
-    """Elimina un videojuego del catálogo. Requiere rol 'admin' en Neon Auth."""
+    """Elimina un videojuego del catálogo. Requiere rol 'admin'."""
     success = await service.delete_video_game(video_game_id)
     return DeleteVideoGameResponse(
         id=video_game_id,

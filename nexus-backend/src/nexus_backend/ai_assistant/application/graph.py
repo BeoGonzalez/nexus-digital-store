@@ -14,7 +14,9 @@ from nexus_backend.ai_assistant.domain.ports import (
     DecisionEnginePort,
     EmbeddingPort,
     ExternalKnowledgePort,
+    GamingNewsPort,
     LLMPort,
+    PriceComparisonPort,
     VectorStorePort,
 )
 from nexus_backend.config import get_settings
@@ -30,6 +32,8 @@ def build_rag_graph(
     vector_store_port: VectorStorePort,
     external_knowledge_port: ExternalKnowledgePort | None = None,
     decision_port: DecisionEnginePort | None = None,
+    gaming_news_port: GamingNewsPort | None = None,
+    price_comparison_port: PriceComparisonPort | None = None,
 ) -> StateGraph:
     settings = get_settings()
 
@@ -78,11 +82,34 @@ def build_rag_graph(
             except Exception as e:
                 logger.debug("External knowledge fetch error: %s", e)
 
+        # Búsqueda de noticias gamer en tiempo real (Tavily API)
+        gaming_news = "Sin noticias adicionales."
+        if gaming_news_port and (intent != "greeting"):
+            target_topic = video_games[0].title if video_games else query
+            try:
+                gaming_news = await gaming_news_port.fetch_news(target_topic)
+            except Exception as e:
+                logger.debug("Gaming news fetch error (Tavily): %s", e)
+
+        # Comparativa de precios con otras tiendas (CheapShark API - Steam, Epic, GOG, etc.)
+        price_comparison = "Sin datos comparativos de otras tiendas."
+        if price_comparison_port and (intent != "greeting"):
+            target_title = video_games[0].title if video_games else query
+            target_price = video_games[0].price_clp if video_games else 0
+            try:
+                comp_data = await price_comparison_port.compare_price(target_title, target_price)
+                if comp_data.get("has_data"):
+                    price_comparison = comp_data.get("comparison_summary", price_comparison)
+            except Exception as e:
+                logger.debug("Price comparison error (CheapShark): %s", e)
+
         logger.info("Retrieved %d games for query: %s (intent=%s)", len(video_games), query[:80], intent)
         return {
             "retrieved_products": video_games,
             "context": context,
             "external_context": external_context,
+            "gaming_news": gaming_news,
+            "price_comparison": price_comparison,
         }
 
     @traceable(name="crew_orchestrate")
@@ -108,6 +135,8 @@ def build_rag_graph(
     async def generate(state: AssistantState) -> dict:
         context = state.get("context", "")
         external_context = state.get("external_context", "Sin datos externos.")
+        gaming_news = state.get("gaming_news", "Sin noticias adicionales.")
+        price_comparison = state.get("price_comparison", "Sin datos comparativos de otras tiendas.")
         crew_analysis = state.get("crew_analysis", "")
         intent = state.get("intent", "recommendation")
         query = state["query"]
@@ -120,14 +149,22 @@ def build_rag_graph(
             ]
             history_text = "\n".join(history_lines)
 
-        user_message = (
-            f"Historial de conversación:\n{history_text}\n\n"
-            f"Intención detectada (Laya AI): {intent}\n\n"
-            f"Videojuegos disponibles:\n{context}\n\n"
-            f"Dato curioso externo:\n{external_context}\n\n"
-            f"Análisis estratégico:\n{crew_analysis}\n\n"
-            f"Pregunta del cliente: {query}"
-        )
+        user_message_parts = [
+            f"Historial de conversación:\n{history_text}\n",
+            f"Intención detectada (Laya AI): {intent}\n",
+            f"Videojuegos disponibles:\n{context}\n",
+        ]
+        if external_context and external_context != "Sin datos externos.":
+            user_message_parts.append(f"Dato curioso externo (Wikipedia):\n{external_context}\n")
+        if gaming_news and "Sin noticias" not in gaming_news:
+            user_message_parts.append(f"Noticias recientes de videojuegos (Tavily API):\n{gaming_news}\n")
+        if price_comparison and "Sin datos" not in price_comparison:
+            user_message_parts.append(f"Comparativa de precios con otras tiendas (CheapShark API):\n{price_comparison}\n")
+        if crew_analysis:
+            user_message_parts.append(f"Análisis estratégico:\n{crew_analysis}\n")
+        user_message_parts.append(f"Pregunta del cliente: {query}")
+
+        user_message = "\n".join(user_message_parts)
 
         underlying_llm = getattr(llm_port, "llm", None)
         if underlying_llm:
@@ -144,6 +181,8 @@ def build_rag_graph(
                 response_text = await chain.ainvoke({
                     "context": context,
                     "external_context": external_context,
+                    "gaming_news": gaming_news,
+                    "price_comparison": price_comparison,
                     "crew_analysis": crew_analysis,
                     "messages": messages,
                     "query": query,

@@ -19,5 +19,7 @@ class AssistantState(TypedDict, total=False):
     retrieved_products: list[VideoGame]
     context: str
     external_context: str
+    gaming_news: str
+    price_comparison: str
     crew_analysis: str
     response: str

@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from nexus_backend.shared.domain.exceptions import (
     BusinessRuleViolationException,
@@ -34,38 +35,57 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
         logger.info("LangSmith & LangChain Tracing V2 connected for project '%s'", settings.LANGSMITH_PROJECT)
 
-    # ── Database bootstrap (inyección explícita, 0 side-effects) ──
+    # ── Database bootstrap (Amazon Aurora PostgreSQL) ──
     from nexus_backend.database import (
-        NeonConnectionConfig,
+        DatabaseConnectionConfig,
         create_db_engine,
         create_session_factory,
         init_db,
         shutdown_db,
     )
 
-    db_config = NeonConnectionConfig(
+    db_config = DatabaseConnectionConfig(
         database_url=settings.DATABASE_URL,
         echo=settings.DEBUG,
-        use_neon_pooler=settings.NEON_POOLED,
+        ssl=settings.DB_SSL,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
     )
     engine = create_db_engine(db_config)
-    session_factory = create_session_factory(engine)
+
+    read_engine = None
+    if settings.DATABASE_READ_URL:
+        read_config = DatabaseConnectionConfig(
+            database_url=settings.DATABASE_READ_URL,
+            echo=settings.DEBUG,
+            ssl=settings.DB_SSL,
+            pool_size=settings.DB_POOL_SIZE,
+            max_overflow=settings.DB_MAX_OVERFLOW,
+        )
+        read_engine = create_db_engine(read_config)
+
+    session_factory = create_session_factory(engine, read_engine=read_engine)
     await init_db(engine, session_factory)
-    logger.info("Database initialized")
+    logger.info("Database initialized successfully")
 
     # ── Embedding model warmup ──
-    from nexus_backend.ai_assistant.infrastructure.embeddings import (
-        HuggingFaceEmbeddingAdapter,
-    )
-    _adapter = HuggingFaceEmbeddingAdapter(
-        model_name=settings.EMBEDDING_MODEL_NAME,
-    )
-    await _adapter.embed_text("warmup")
-    logger.info("Embedding model loaded and warmed up")
+    try:
+        from nexus_backend.ai_assistant.infrastructure.embeddings import (
+            HuggingFaceEmbeddingAdapter,
+        )
+        _adapter = HuggingFaceEmbeddingAdapter(
+            model_name=settings.EMBEDDING_MODEL_NAME,
+        )
+        await _adapter.embed_text("warmup")
+        logger.info("Embedding model loaded and warmed up")
+    except Exception as exc:
+        logger.warning("Embedding model warmup skipped or deferred: %s", exc)
 
     yield
 
     # ── Graceful shutdown ──
+    if read_engine is not None:
+        await shutdown_db(read_engine)
     await shutdown_db(engine)
     logger.info("Shutting down %s...", settings.APP_NAME)
 
@@ -91,17 +111,44 @@ def create_app() -> FastAPI:
     from nexus_backend.auth.presentation.router import router as auth_router
     from nexus_backend.catalog.presentation.router import router as catalog_router
     from nexus_backend.orders.presentation.router import router as orders_router
-    from nexus_backend.ai_assistant.presentation.router import router as assistant_router
 
     api_prefix = "/api/v1"
     application.include_router(auth_router, prefix=api_prefix)
     application.include_router(catalog_router, prefix=api_prefix)
     application.include_router(orders_router, prefix=api_prefix)
-    application.include_router(assistant_router, prefix=api_prefix)
 
+    try:
+        from nexus_backend.ai_assistant.presentation.router import router as assistant_router
+        application.include_router(assistant_router, prefix=api_prefix)
+    except Exception as e:
+        logger.warning(f"AI Assistant router could not be loaded: {e}")
+
+    # ── Health checks ──
+    # Liveness check: ALB / ECS ping sin tocar la base de datos
+    @application.get("/api/health", tags=["Health"])
     @application.get("/api/v1/health", tags=["Health"])
-    async def health_check() -> dict:
+    async def liveness_health_check() -> dict:
         return {"status": "healthy", "service": settings.APP_NAME}
+
+    # Readiness check: verifica conectividad real contra Amazon Aurora
+    @application.get("/api/health/ready", tags=["Health"])
+    @application.get("/api/v1/health/ready", tags=["Health"])
+    async def readiness_health_check() -> JSONResponse:
+        from nexus_backend.database import get_session_factory
+        try:
+            factory = get_session_factory()
+            async with factory() as session:
+                await session.execute(text("SELECT 1"))
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={"status": "ready", "database": "connected", "service": settings.APP_NAME},
+            )
+        except Exception as exc:
+            logger.error("Readiness check failed against Aurora: %s", exc)
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"status": "not_ready", "database": str(exc), "service": settings.APP_NAME},
+            )
 
     @application.exception_handler(ResourceNotFoundException)
     async def not_found_handler(request: Request, exc: ResourceNotFoundException):

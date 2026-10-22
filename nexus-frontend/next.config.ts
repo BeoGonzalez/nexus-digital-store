@@ -6,9 +6,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "br-crimson-butterfly-ayvi9543.storage.c-5.us-east-2.aws.neon.tech",
-        port: "",
-        pathname: "/**",
+        hostname: "**.amazonaws.com",
       },
       {
         protocol: "https",

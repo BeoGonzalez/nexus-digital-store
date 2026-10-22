@@ -13,7 +13,7 @@ from nexus_backend.main import app
 def dummy_user() -> User:
     """Fixture de usuario estándar (cliente) no baneado."""
     return User(
-        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         name="John Gamer",
         email="john@nexus.cl",
         role="user",
@@ -29,7 +29,7 @@ def dummy_user() -> User:
 def dummy_admin() -> User:
     """Fixture de usuario con rol administrativo."""
     return User(
-        id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         name="Admin Boss",
         email="admin@nexus.cl",
         role="admin",
@@ -45,7 +45,7 @@ def dummy_admin() -> User:
 def dummy_banned_user() -> User:
     """Fixture de usuario con cuenta suspendida/baneada."""
     return User(
-        id=UUID("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+        id="cccccccc-cccc-cccc-cccc-cccccccccccc",
         name="Banned Cheater",
         email="cheater@nexus.cl",
         role="user",

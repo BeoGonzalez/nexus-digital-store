@@ -12,7 +12,9 @@ from nexus_backend.ai_assistant.domain.ports import (
     DecisionEnginePort,
     EmbeddingPort,
     ExternalKnowledgePort,
+    GamingNewsPort,
     LLMPort,
+    PriceComparisonPort,
     VectorStorePort,
 )
 from nexus_backend.config import get_settings
@@ -29,12 +31,16 @@ class AssistantService:
         external_knowledge_port: ExternalKnowledgePort | None = None,
         decision_port: DecisionEnginePort | None = None,
         checkpointer: MemorySaver | None = None,
+        gaming_news_port: GamingNewsPort | None = None,
+        price_comparison_port: PriceComparisonPort | None = None,
     ) -> None:
         self._embedding = embedding_port
         self._llm = llm_port
         self._vector_store = vector_store_port
         self._external_knowledge = external_knowledge_port
         self._decision = decision_port
+        self._gaming_news = gaming_news_port
+        self._price_comparison = price_comparison_port
         self._checkpointer = checkpointer if checkpointer is not None else MemorySaver()
         self._graph = build_rag_graph(
             embedding_port,
@@ -42,6 +48,8 @@ class AssistantService:
             vector_store_port,
             external_knowledge_port,
             decision_port,
+            gaming_news_port,
+            price_comparison_port,
         ).compile(checkpointer=self._checkpointer)
 
     @staticmethod
@@ -238,6 +246,27 @@ class AssistantService:
             except Exception as e:
                 logger.debug("External knowledge fetch error in stream: %s", e)
 
+        # Noticias de videojuegos en tiempo real (Tavily API)
+        gaming_news = "Sin noticias adicionales."
+        if self._gaming_news and (intent != "greeting"):
+            target_topic = video_games[0].title if video_games else query
+            try:
+                gaming_news = await self._gaming_news.fetch_news(target_topic)
+            except Exception as e:
+                logger.debug("Gaming news fetch error in stream (Tavily): %s", e)
+
+        # Comparativa de precios con otras tiendas (CheapShark API - Steam, Epic, GOG, etc.)
+        price_comparison = "Sin datos comparativos de otras tiendas."
+        if self._price_comparison and (intent != "greeting"):
+            target_title = video_games[0].title if video_games else query
+            target_price = video_games[0].price_clp if video_games else 0
+            try:
+                comp_data = await self._price_comparison.compare_price(target_title, target_price)
+                if comp_data.get("has_data"):
+                    price_comparison = comp_data.get("comparison_summary", price_comparison)
+            except Exception as e:
+                logger.debug("Price comparison fetch error in stream (CheapShark): %s", e)
+
         # Orquestación multi-agente CrewAI
         crew_analysis = ""
         if settings.ENABLE_CREWAI_ORCHESTRATION and video_games and (intent != "greeting"):
@@ -256,10 +285,15 @@ class AssistantService:
 
         user_message_parts = [
             f"Historial de conversación:\n{history_text}\n",
+            f"Intención detectada (Laya AI): {intent}\n",
             f"Videojuegos disponibles:\n{context}\n",
         ]
         if external_context and external_context != "Sin datos externos.":
-            user_message_parts.append(f"Dato curioso externo:\n{external_context}\n")
+            user_message_parts.append(f"Dato curioso externo (Wikipedia):\n{external_context}\n")
+        if gaming_news and "Sin noticias" not in gaming_news:
+            user_message_parts.append(f"Noticias recientes de videojuegos (Tavily API):\n{gaming_news}\n")
+        if price_comparison and "Sin datos" not in price_comparison:
+            user_message_parts.append(f"Comparativa de precios con otras tiendas (CheapShark API):\n{price_comparison}\n")
         if crew_analysis:
             user_message_parts.append(f"Análisis estratégico:\n{crew_analysis}\n")
         user_message_parts.append(f"Pregunta del cliente: {query}")

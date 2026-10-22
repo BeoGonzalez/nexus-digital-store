@@ -13,7 +13,7 @@ from nexus_backend.catalog.application.services import CatalogService
 from nexus_backend.catalog.infrastructure.repositories import SQLAlchemyVideoGameRepository
 from nexus_backend.config import get_settings
 from nexus_backend.database import (
-    NeonConnectionConfig,
+    DatabaseConnectionConfig,
     create_db_engine,
     create_session_factory,
     shutdown_db,
@@ -27,10 +27,10 @@ async def main() -> None:
     settings = get_settings()
     logger.info("Iniciando sincronización con Pinecone: index=%s, namespace=%s", settings.PINECONE_INDEX_NAME, settings.PINECONE_NAMESPACE)
 
-    db_config = NeonConnectionConfig(
+    db_config = DatabaseConnectionConfig(
         database_url=settings.DATABASE_URL,
         echo=False,
-        use_neon_pooler=settings.NEON_POOLED,
+        ssl=settings.DB_SSL,
     )
     engine = create_db_engine(db_config)
     session_factory = create_session_factory(engine)

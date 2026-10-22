@@ -7,7 +7,7 @@ export const useLoginMutation = () => {
   
   return useMutation({
     mutationFn: async (data: Record<string, string>) => {
-      // Neon Auth Login
+      // Cognito Login
       return await fetchClient<{ token: string }>('/api/v1/auth/login', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -24,7 +24,7 @@ export const useLoginMutation = () => {
 export const useRegisterMutation = () => {
   return useMutation({
     mutationFn: async (data: Record<string, string>) => {
-      // Neon Auth Register
+      // Cognito Register
       return await fetchClient('/api/v1/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),

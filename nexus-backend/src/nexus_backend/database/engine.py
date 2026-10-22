@@ -1,4 +1,4 @@
-"""Engine factory — construye el AsyncEngine bajo demanda.
+"""Engine factory — construye el AsyncEngine bajo demanda para Amazon Aurora PostgreSQL.
 
 Principio: ningún import de este módulo produce side-effects.
 El engine se crea SOLO cuando se invoca la factory explícitamente.
@@ -7,35 +7,29 @@ El engine se crea SOLO cuando se invoca la factory explícitamente.
 from __future__ import annotations
 
 import logging
+import urllib.parse
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlalchemy.pool import NullPool
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
-class NeonConnectionConfig:
-    """Parámetros de conexión específicos de Neon Serverless.
-
-    Encapsula la decisión de infraestructura en un Value Object
-    inmutable, separando la política de conexión del mecanismo
-    de creación del engine.
-
-    Si mañana se soporta otro proveedor (Aurora, Supabase), se crea
-    una nueva config sin modificar ``create_db_engine`` → Open/Closed.
-    """
+class DatabaseConnectionConfig:
+    """Parámetros de conexión para Amazon Aurora PostgreSQL."""
 
     database_url: str
     echo: bool = False
-    use_neon_pooler: bool = False
+    ssl: bool = False
+    pool_size: int = 10
+    max_overflow: int = 5
+    pool_recycle: int = 1800
+    pool_pre_ping: bool = True
 
     @property
     def normalized_url(self) -> str:
         """Normaliza la URL asegurando el dialecto postgresql+asyncpg y eliminando query params incompatibles."""
-        import urllib.parse
-
         url = self.database_url.strip()
         if url.startswith("postgres://"):
             url = "postgresql+asyncpg://" + url[len("postgres://"):]
@@ -43,63 +37,46 @@ class NeonConnectionConfig:
             url = "postgresql+asyncpg://" + url[len("postgresql://"):]
 
         parsed = urllib.parse.urlparse(url)
-        # Si es neon.tech o contiene query params como sslmode, limpiamos la query string ya que asyncpg
-        # gestiona ssl y configs a través de connect_args
-        if "sslmode" in parsed.query or "neon.tech" in parsed.netloc:
-            return urllib.parse.urlunparse(parsed._replace(query=""))
+        # asyncpg no tolera parámetros como sslmode, channel_binding o endpoint en el query string
+        if parsed.query:
+            params_to_strip = {"sslmode", "channel_binding", "endpoint", "ssl"}
+            query_pairs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+            filtered_pairs = [pair for pair in query_pairs if pair[0].lower() not in params_to_strip]
+            new_query = urllib.parse.urlencode(filtered_pairs)
+            return urllib.parse.urlunparse(parsed._replace(query=new_query))
         return url
 
     @property
-    def is_pooler(self) -> bool:
-        return self.use_neon_pooler or "-pooler" in self.database_url
-
-    @property
-    def pool_class(self) -> type:
-        """NullPool para Neon serverless (sin pool local).
-
-        Neon suspende el compute a cero; un pool persistente dejaría
-        conexiones huérfanas contra un endpoint dormido.
-        """
-        return NullPool
-
-    @property
     def connect_args(self) -> dict[str, object]:
-        """Args de conexión TCP para asyncpg.
-
-        • ssl='require': Neon rechaza conexiones sin TLS.
-        • prepared_statement_cache_size=0: el pooler de Neon (pgbouncer
-          en modo transaction) no soporta named prepared statements.
-        """
+        """Args de conexión TCP para asyncpg."""
         args: dict[str, object] = {}
-
-        if self._is_neon_url:
+        if self.ssl:
             args["ssl"] = "require"
-
-        if self.is_pooler:
-            args["prepared_statement_cache_size"] = 0
-
         return args
 
-    @property
-    def _is_neon_url(self) -> bool:
-        return "neon.tech" in self.database_url
+
+# Alias para compatibilidad con Aurora
+AuroraConnectionConfig = DatabaseConnectionConfig
 
 
-def create_db_engine(config: NeonConnectionConfig) -> AsyncEngine:
-    """Factory pura que crea un AsyncEngine a partir de config inyectada.
+def create_db_engine(config: DatabaseConnectionConfig) -> AsyncEngine:
+    """Factory pura que crea un AsyncEngine a partir de la configuración inyectada.
 
     No lee settings globales. No produce side-effects al importar.
-    El llamador es responsable de gestionar el ciclo de vida del engine.
     """
     engine = create_async_engine(
         config.normalized_url,
         echo=config.echo,
-        poolclass=config.pool_class,
+        pool_size=config.pool_size,
+        max_overflow=config.max_overflow,
+        pool_recycle=config.pool_recycle,
+        pool_pre_ping=config.pool_pre_ping,
         connect_args=config.connect_args,
     )
     logger.info(
-        "Database engine created (pool=%s, is_pooler=%s)",
-        config.pool_class.__name__,
-        config.is_pooler,
+        "Database engine created (pool_size=%d, max_overflow=%d, ssl=%s)",
+        config.pool_size,
+        config.max_overflow,
+        config.ssl,
     )
     return engine

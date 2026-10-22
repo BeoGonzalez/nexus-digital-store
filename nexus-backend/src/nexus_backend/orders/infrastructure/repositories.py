@@ -49,7 +49,7 @@ class SQLAlchemyOrderRepository(OrderRepository):
             items=items,
         )
 
-    async def get_by_user_id(self, user_id: UUID) -> list[OrderEntity]:
+    async def get_by_user_id(self, user_id: str) -> list[OrderEntity]:
         stmt = (
             select(OrderModel)
             .where(OrderModel.user_id == user_id)
@@ -115,7 +115,7 @@ class SQLAlchemyPaymentMethodRepository(PaymentMethodRepository):
             is_default=model.is_default
         )
 
-    async def get_by_user_id(self, user_id: UUID) -> list[PaymentMethodEntity]:
+    async def get_by_user_id(self, user_id: str) -> list[PaymentMethodEntity]:
         stmt = select(PaymentMethodModel).where(PaymentMethodModel.user_id == user_id)
         result = await self._session.execute(stmt)
         return [self._to_entity(m) for m in result.scalars().all()]
