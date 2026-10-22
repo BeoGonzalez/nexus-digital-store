@@ -35,6 +35,7 @@ class TestOrchestrationPipeline:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(get_settings(), "GROQ_API_KEY", "")
+        monkeypatch.setattr(get_settings(), "ENABLE_CREWAI_ORCHESTRATION", True)
         result = await run_nexus_crew(
             query="¿Tienen juegos de rol?",
             catalog_context="1. Cyberpunk 2077 - $35000 CLP",
@@ -51,6 +52,7 @@ class TestOrchestrationPipeline:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(get_settings(), "GROQ_API_KEY", "")
+        monkeypatch.setattr(get_settings(), "ENABLE_CREWAI_ORCHESTRATION", True)
         mock_embedding = AsyncMock()
         mock_embedding.embed_text.return_value = [0.1] * 384
 

@@ -53,7 +53,8 @@ class WikipediaAdapter(ExternalKnowledgePort):
                     return result.strip() if result else "Sin datos externos."
                 except Exception as exc:
                     logger.debug("WikipediaAPIWrapper query failed for '%s': %s", query, exc)
-            if wikipedia:
+                    return "Sin datos externos."
+            elif wikipedia:
                 try:
                     wikipedia.set_lang(self._lang)
                     search_results = wikipedia.search(query, results=self._top_k)

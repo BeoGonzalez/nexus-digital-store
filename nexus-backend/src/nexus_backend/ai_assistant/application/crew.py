@@ -1,5 +1,7 @@
 """Orquestación Multi-Agente con CrewAI para Nexus Digital Store."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import Any
@@ -9,13 +11,13 @@ litellm.drop_params = True
 
 # Neutralizar cache_breakpoint de CrewAI para compatibilidad total con Groq
 try:
-    import crewai.llms.cache
+    import crewai.llms.cache  # type: ignore
     crewai.llms.cache.mark_cache_breakpoint = lambda message: message
 except Exception:
     pass
 
 try:
-    from crewai import Agent, Crew, Process, Task
+    from crewai import Agent, Crew, Process, Task  # type: ignore
 except ImportError:
     Agent = Any  # type: ignore
     Crew = Any  # type: ignore
@@ -28,14 +30,14 @@ logger = logging.getLogger(__name__)
 
 def create_nexus_crew(
     llm: Any = None,
-) -> Crew:
+) -> Any:
     """Crea la Crew multi-agente para análisis de catálogo y estrategia de ventas."""
     settings = get_settings()
     agent_llm = llm
 
     if settings.GROQ_API_KEY and settings.GROQ_API_KEY != "your-groq-api-key":
         try:
-            from crewai import LLM
+            from crewai import LLM  # type: ignore
             agent_llm = LLM(
                 model=f"groq/{settings.GROQ_MODEL_NAME}",
                 api_key=settings.GROQ_API_KEY,

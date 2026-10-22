@@ -43,6 +43,11 @@ from nexus_backend.ai_assistant.infrastructure.cheapshark_adapter import CheapSh
 from nexus_backend.ai_assistant.infrastructure.llm import GroqLLMAdapter
 from nexus_backend.ai_assistant.infrastructure.email_adapter import GmailEmailAdapter
 from nexus_backend.ai_assistant.application.chains import NEXUSBOT_SYSTEM_PROMPT
+from nexus_backend.ai_assistant.application.context_resolver import (
+    align_catalog_context,
+    build_unified_user_message,
+    resolve_target_game,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -110,8 +115,14 @@ def get_embedding_adapter(model_name: str) -> HuggingFaceEmbeddingAdapter:
     return HuggingFaceEmbeddingAdapter(model_name=model_name)
 
 
-async def run_cognitive_pipeline(query: str, settings: Any, model_name: str, temp: float) -> dict[str, Any]:
-    """Ejecuta los 5 pasos cognitivos (Laya, Pinecone, Wikipedia, Tavily, CheapShark) en paralelo."""
+async def run_cognitive_pipeline(
+    query: str,
+    settings: Any,
+    model_name: str,
+    temp: float,
+    chat_history: list[dict] | None = None,
+) -> dict[str, Any]:
+    """Ejecuta los 5 pasos cognitivos (Laya, Pinecone, Wikipedia, Tavily, CheapShark) en paralelo y sincronizados."""
     # 1. Laya AI (System 1)
     laya = LayaDecisionAdapter(model_name=settings.LAYA_MODEL_NAME)
     decision = await laya.evaluate_decision(query)
@@ -139,12 +150,16 @@ async def run_cognitive_pipeline(query: str, settings: Any, model_name: str, tem
     except Exception as e:
         vector_source = f"Error: {e}"
 
-    target_title = matched_games[0].title if matched_games else query
-    target_price = matched_games[0].price_clp if matched_games else 0
+    # Resolución inteligente y sincronizada del juego objetivo
+    target = resolve_target_game(query, chat_history=chat_history, candidates=matched_games)
+    aligned_games, context_formatted = align_catalog_context(target, matched_games)
+
+    target_title = target.title
+    target_price = target.price_clp
 
     # 3, 4, 5. Ejecución concurrente en paralelo de Wikipedia, Tavily y CheapShark
     async def _safe_trivia() -> str:
-        if need_trivia and intent != "greeting":
+        if need_trivia and intent != "greeting" and target_title:
             try:
                 wiki = WikipediaAdapter(lang=settings.WIKIPEDIA_LANG, top_k_results=1, doc_content_chars_max=400)
                 return await wiki.fetch_trivia(target_title)
@@ -153,7 +168,7 @@ async def run_cognitive_pipeline(query: str, settings: Any, model_name: str, tem
         return "Sin datos externos."
 
     async def _safe_news() -> str:
-        if intent != "greeting" and settings.TAVILY_API_KEY:
+        if intent != "greeting" and settings.TAVILY_API_KEY and target_title:
             try:
                 tavily = TavilyNewsAdapter(api_key=settings.TAVILY_API_KEY, max_results=3)
                 return await tavily.fetch_news(target_title)
@@ -162,7 +177,7 @@ async def run_cognitive_pipeline(query: str, settings: Any, model_name: str, tem
         return "Sin noticias adicionales."
 
     async def _safe_cheapshark() -> dict:
-        if intent != "greeting" and settings.CHEAPSHARK_ENABLED:
+        if intent != "greeting" and settings.CHEAPSHARK_ENABLED and target_title:
             try:
                 cheap = CheapSharkPriceAdapter(usd_clp_rate=settings.CHEAPSHARK_USD_CLP_RATE)
                 return await cheap.compare_price(target_title, target_price)
@@ -180,7 +195,9 @@ async def run_cognitive_pipeline(query: str, settings: Any, model_name: str, tem
         "decision": decision,
         "intent": intent,
         "recipient_email": recipient_email,
-        "matched_games": matched_games,
+        "target": target,
+        "matched_games": aligned_games,
+        "context_formatted": context_formatted,
         "vector_source": vector_source,
         "trivia": trivia_res,
         "news": news_res,
@@ -296,31 +313,45 @@ if user_query:
     with st.chat_message("assistant"):
         with st.status("🧠 Ejecutando Pipeline Cognitivo Multi-Agente...", expanded=True) as status_box:
             st.write("1. 🧠 Evaluando intención reflexiva con **Laya AI (System 1)**...")
-            pipeline_data = asyncio.run(run_cognitive_pipeline(user_query, settings, selected_model, temperature))
+            pipeline_data = asyncio.run(
+                run_cognitive_pipeline(
+                    user_query,
+                    settings,
+                    selected_model,
+                    temperature,
+                    chat_history=st.session_state.messages,
+                )
+            )
 
-            st.write(f"2. 🌲 Recuperando catálogo semántico desde **{pipeline_data['vector_source']}**...")
+            st.write(f"2. 🌲 Catálogo semántico sincronizado para **'{pipeline_data['target_title']}'** ({pipeline_data['vector_source']})...")
             st.write("3. 🏷️ Comparando precios internacionales en vivo con **CheapShark API**...")
             st.write("4. 📰 Buscando noticias y parches en **Tavily AI Search**...")
             st.write("5. ⚡ Generando síntesis contextual en **Groq Cloud**...")
-            status_box.update(label="✔ Pipeline completado exitosamente", state="complete", expanded=False)
+            status_box.update(label="✔ Pipeline sincronizado y completado exitosamente", state="complete", expanded=False)
 
-        # Construcción del contexto para el LLM
-        matched_games = pipeline_data["matched_games"]
-        context_games = "\n".join(
-            [f"- {g.title} (${g.price_clp:,} CLP, Stock: {g.stock}): {g.description}".replace(",", ".") for g in matched_games]
-        ) or "No se encontraron juegos en catálogo."
-
+        # Construcción del contexto unificado para el LLM
         price_summary = pipeline_data["cheapshark"].get("comparison_summary", "Sin datos comparativos.")
         news_summary = pipeline_data["news"]
         trivia_summary = pipeline_data["trivia"]
 
-        user_message_prompt = (
-            f"Intención del cliente (Laya AI): {pipeline_data['intent']}\n\n"
-            f"Videojuegos disponibles en tienda:\n{context_games}\n\n"
-            f"Dato curioso externo (Wikipedia):\n{trivia_summary}\n\n"
-            f"Noticias recientes de videojuegos (Tavily API):\n{news_summary}\n\n"
-            f"Comparativa de precios con otras tiendas (CheapShark API):\n{price_summary}\n\n"
-            f"Pregunta del cliente: {user_query}"
+        user_message_prompt = build_unified_user_message(
+            query=user_query,
+            target=pipeline_data["target"],
+            intent=pipeline_data["intent"],
+            context=pipeline_data["context_formatted"],
+            external_context=trivia_summary,
+            gaming_news=news_summary,
+            price_comparison=price_summary,
+            crew_analysis="",
+            chat_history=st.session_state.messages,
+        )
+
+        formatted_system_prompt = NEXUSBOT_SYSTEM_PROMPT.format(
+            context=pipeline_data["context_formatted"],
+            external_context=trivia_summary,
+            gaming_news=news_summary,
+            price_comparison=price_summary,
+            crew_analysis="Sin análisis estratégico adicional.",
         )
 
         llm = GroqLLMAdapter(
@@ -335,7 +366,7 @@ if user_query:
         try:
             async def generate_response():
                 chunks = []
-                async for chunk in llm.generate_stream(NEXUSBOT_SYSTEM_PROMPT, user_message_prompt):
+                async for chunk in llm.generate_stream(formatted_system_prompt, user_message_prompt):
                     chunks.append(chunk)
                     response_placeholder.markdown("".join(chunks) + "▌")
                 return "".join(chunks)

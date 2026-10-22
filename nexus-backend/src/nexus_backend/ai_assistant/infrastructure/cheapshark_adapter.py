@@ -1,6 +1,9 @@
-"""Adaptador para análisis y comparativa de precios de videojuegos mediante CheapShark API."""
+"""Adaptador de alto rendimiento para análisis y comparativa de precios mediante CheapShark API."""
+
+from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -10,26 +13,35 @@ from nexus_backend.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Mapa conocido de tiendas principales en CheapShark
-DEFAULT_STORE_NAMES: dict[str, str] = {
+# Catálogo completo precargado de tiendas de CheapShark para evitar llamadas de red redundantes
+STORE_NAMES: dict[str, str] = {
     "1": "Steam",
     "2": "GamersGate",
     "3": "GreenManGaming",
+    "4": "Amazon",
+    "5": "GameStop",
+    "6": "Direct2Drive",
     "7": "GOG",
+    "8": "Origin / EA App",
     "11": "Humble Store",
-    "13": "Uplay / Ubisoft Connect",
+    "13": "Ubisoft Connect",
     "15": "Fanatical",
     "21": "WinGameStore",
     "23": "GameBillet",
+    "24": "Voidu",
     "25": "Epic Games Store",
     "27": "Gamesplanet",
+    "28": "Gamesload",
+    "29": "2Game",
     "30": "IndieGala",
     "31": "Blizzard Shop",
+    "32": "AllYouPlay",
+    "35": "DreamGame",
 }
 
 
 class CheapSharkPriceAdapter(PriceComparisonPort):
-    """Cliente asíncrono para comparar precios de Nexus Digital Store contra tiendas globales (Steam, Epic, GOG, etc.)."""
+    """Cliente asíncrono optimizado para comparar precios de Nexus Digital Store contra Steam, Epic, GOG, etc."""
 
     def __init__(
         self,
@@ -45,25 +57,87 @@ class CheapSharkPriceAdapter(PriceComparisonPort):
         self._client = client
         self._base_url = "https://www.cheapshark.com/api/1.0"
         self._headers = {
-            "User-Agent": "NexusDigitalStore/1.0 (soporte@nexusdigital.store; comparador-gamer)",
+            "User-Agent": "NexusDigitalStore/2.0 (soporte@nexusdigital.store; comparador-gamer-ultrafast)",
         }
-        self._store_cache: dict[str, str] = dict(DEFAULT_STORE_NAMES)
+        self._store_cache: dict[str, str] = dict(STORE_NAMES)
 
-    async def _ensure_stores_cache(self, client: httpx.AsyncClient) -> None:
-        """Descarga dinámicamente el listado de tiendas de CheapShark si no se ha inicializado."""
-        if len(self._store_cache) > len(DEFAULT_STORE_NAMES):
-            return
+    def _clean_game_title(self, raw_title: str) -> str:
+        """Limpia el título eliminando coletillas o palabras de búsqueda comunes."""
+        clean = raw_title.strip()
+        # Eliminar frases de búsqueda en español si vinieron en el título
+        clean = re.sub(
+            r"(?i)\b(a cuanto esta|cuanto cuesta|precio de|ofertas de|en otras tiendas|en steam|en epic|juego|videojuego)\b",
+            "",
+            clean,
+        ).strip()
+        # Eliminar caracteres extraños
+        clean = re.sub(r"\s+", " ", clean).strip()
+        return clean or raw_title.strip()
+
+    async def _fetch_deals_direct(self, client: httpx.AsyncClient, title: str) -> list[dict[str, Any]]:
+        """Consulta el endpoint /deals de CheapShark en 1 sola llamada ultrarrápida."""
+        # 1. Intentar con el título limpio
         try:
-            res = await client.get(f"{self._base_url}/stores")
+            res = await client.get(
+                f"{self._base_url}/deals",
+                params={"title": title, "limit": 20},
+            )
             if res.status_code == 200:
-                stores_data = res.json()
-                for s in stores_data:
-                    store_id = str(s.get("storeID", ""))
-                    store_name = s.get("storeName", "")
-                    if store_id and store_name:
-                        self._store_cache[store_id] = store_name
+                data = res.json()
+                if isinstance(data, list) and data and ("dealID" in data[0] or "salePrice" in data[0]):
+                    return data
         except Exception as e:
-            logger.debug("No se pudo actualizar catálogo de tiendas CheapShark: %s", e)
+            logger.debug("Error consultando /deals para '%s': %s", title, e)
+
+        # 2. Si tiene subtítulo (ej: 'Cyberpunk 2077: Phantom Liberty' -> 'Cyberpunk 2077'), probar con la base
+        if ":" in title or " - " in title:
+            base_title = title.split(":")[0].split(" - ")[0].strip()
+            if base_title and base_title != title:
+                try:
+                    res = await client.get(
+                        f"{self._base_url}/deals",
+                        params={"title": base_title, "limit": 20},
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        if isinstance(data, list) and data and ("dealID" in data[0] or "salePrice" in data[0]):
+                            return data
+                except Exception:
+                    pass
+
+        # 3. Fallback a /games?title=... si /deals no encontró directamente
+        try:
+            res = await client.get(
+                f"{self._base_url}/games",
+                params={"title": title, "limit": 3},
+            )
+            if res.status_code == 200:
+                games_list = res.json()
+                if isinstance(games_list, list) and games_list:
+                    game_id = games_list[0].get("gameID")
+                    if game_id:
+                        g_res = await client.get(
+                            f"{self._base_url}/games",
+                            params={"id": game_id},
+                        )
+                        if g_res.status_code == 200:
+                            g_data = g_res.json()
+                            deals = g_data.get("deals", [])
+                            # Adaptar formato de deals de /games al de /deals
+                            return [
+                                {
+                                    "title": games_list[0].get("external", title),
+                                    "storeID": str(d.get("storeID", "")),
+                                    "salePrice": d.get("price", "0.0"),
+                                    "normalPrice": d.get("retailPrice", "0.0"),
+                                    "savings": d.get("savings", "0.0"),
+                                }
+                                for d in deals
+                            ]
+        except Exception:
+            pass
+
+        return []
 
     async def _compare_with_client(
         self,
@@ -72,52 +146,25 @@ class CheapSharkPriceAdapter(PriceComparisonPort):
         nexus_price_clp: int,
         empty_result: dict[str, Any],
     ) -> dict[str, Any]:
-        await self._ensure_stores_cache(client)
-
-        # 1. Buscar coincidencias del título en CheapShark
-        search_res = await client.get(
-            f"{self._base_url}/games",
-            params={"title": clean_title, "limit": "3"},
-        )
-
-        if search_res.status_code != 200:
-            logger.debug("CheapShark search error %d para '%s'", search_res.status_code, clean_title)
-            return empty_result
-
-        games_found = search_res.json()
-        if not games_found or not isinstance(games_found, list):
-            return empty_result
-
-        # Tomar la coincidencia más relevante
-        target_game = games_found[0]
-        game_id = target_game.get("gameID")
-        canonical_title = target_game.get("external", clean_title)
-
-        if not game_id:
-            return empty_result
-
-        # 2. Consultar todos los deals disponibles para ese juego
-        deals_res = await client.get(
-            f"{self._base_url}/games",
-            params={"id": game_id},
-        )
-
-        if deals_res.status_code != 200:
-            return empty_result
-
-        deals_data = deals_res.json()
-        raw_deals = deals_data.get("deals", [])
+        raw_deals = await self._fetch_deals_direct(client, clean_title)
         if not raw_deals:
             return empty_result
 
-        # 3. Procesar las ofertas de otras tiendas
+        canonical_title = raw_deals[0].get("title", clean_title)
+
         parsed_deals: list[dict[str, Any]] = []
+        seen_stores: set[str] = set()
+
         for d in raw_deals:
             store_id = str(d.get("storeID", ""))
             store_name = self._store_cache.get(store_id, f"Tienda #{store_id}")
-            deal_price_usd = float(d.get("price", "0.0"))
-            retail_price_usd = float(d.get("retailPrice", "0.0"))
-            savings_pct = float(d.get("savings", "0.0"))
+            if store_name in seen_stores:
+                continue
+            seen_stores.add(store_name)
+
+            deal_price_usd = float(d.get("salePrice") or d.get("price") or d.get("cheapest") or 0.0)
+            retail_price_usd = float(d.get("normalPrice") or d.get("retailPrice") or deal_price_usd)
+            savings_pct = float(d.get("savings") or 0.0)
 
             deal_price_clp = int(round(deal_price_usd * self._usd_rate))
             retail_price_clp = int(round(retail_price_usd * self._usd_rate))
@@ -131,18 +178,20 @@ class CheapSharkPriceAdapter(PriceComparisonPort):
                 "savings_pct": savings_pct,
             })
 
+        if not parsed_deals:
+            return empty_result
+
         # Ordenar por el precio más bajo externo
         parsed_deals.sort(key=lambda x: x["deal_price_clp"])
         cheapest_deal = parsed_deals[0]
         cheapest_external_price = cheapest_deal["deal_price_clp"]
         cheapest_store = cheapest_deal["store_name"]
 
-        # 4. Determinar si en Nexus está más barato o más caro
+        # Determinar si en Nexus está más barato o más caro
         is_nexus_cheaper = nexus_price_clp < cheapest_external_price
         is_nexus_more_expensive = nexus_price_clp > cheapest_external_price
         diff_clp = abs(nexus_price_clp - cheapest_external_price)
 
-        # 5. Generar resumen estructurado y transparente para el asistente
         summary_lines = [
             f"Comparativa de precios para '{canonical_title}':",
             f"• Precio en Nexus Digital Store: ${nexus_price_clp:,} CLP".replace(",", "."),
@@ -167,8 +216,8 @@ class CheapSharkPriceAdapter(PriceComparisonPort):
             )
             verdict = "IGUAL PRECIO"
 
-        summary_lines.append("• Precios de referencia en otras tiendas:")
-        for deal in parsed_deals[:4]:
+        summary_lines.append("• Precios de referencia en tiendas internacionales:")
+        for deal in parsed_deals[:5]:
             p_usd = deal["deal_price_usd"]
             p_clp = deal["deal_price_clp"]
             store = deal["store_name"]
@@ -193,8 +242,10 @@ class CheapSharkPriceAdapter(PriceComparisonPort):
 
     async def compare_price(self, game_title: str, nexus_price_clp: int) -> dict[str, Any]:
         """Compara el precio de un videojuego en Nexus con Steam, Epic Games, GOG y otras tiendas."""
+        clean_title = self._clean_game_title(game_title)
+
         empty_result: dict[str, Any] = {
-            "game_title": game_title,
+            "game_title": clean_title,
             "nexus_price_clp": nexus_price_clp,
             "has_data": False,
             "is_nexus_cheaper": False,
@@ -203,17 +254,14 @@ class CheapSharkPriceAdapter(PriceComparisonPort):
             "deals": [],
         }
 
-        if not self._enabled or not game_title or not game_title.strip():
+        if not self._enabled or not clean_title:
             return empty_result
-
-        clean_title = game_title.strip()
 
         try:
             if self._client:
                 return await self._compare_with_client(self._client, clean_title, nexus_price_clp, empty_result)
-            async with httpx.AsyncClient(timeout=8.0, headers=self._headers) as client:
+            async with httpx.AsyncClient(timeout=12.0, headers=self._headers) as client:
                 return await self._compare_with_client(client, clean_title, nexus_price_clp, empty_result)
         except Exception as exc:
             logger.debug("Fallo al comparar precios en CheapShark para '%s': %s", clean_title, exc)
             return empty_result
-

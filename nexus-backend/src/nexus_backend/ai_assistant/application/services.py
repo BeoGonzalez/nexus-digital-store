@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -5,6 +6,11 @@ from collections.abc import AsyncIterator
 from langgraph.checkpoint.memory import MemorySaver
 from langsmith import traceable
 
+from nexus_backend.ai_assistant.application.context_resolver import (
+    align_catalog_context,
+    build_unified_user_message,
+    resolve_target_game,
+)
 from nexus_backend.ai_assistant.application.crew import run_nexus_crew
 from nexus_backend.ai_assistant.application.graph import SYSTEM_PROMPT, build_rag_graph
 from nexus_backend.ai_assistant.domain.entities import AssistantState, ChatMessage
@@ -226,54 +232,54 @@ class AssistantService:
                 logger.debug("Laya decision evaluation failed in chat_stream: %s", e)
 
         embedding = await self._embedding.embed_text(query)
-        video_games = await self._vector_store.similarity_search(
+        candidates = await self._vector_store.similarity_search(
             embedding, top_k=settings.VECTOR_SEARCH_TOP_K,
         )
 
-        context_parts = []
-        for i, vg in enumerate(video_games, 1):
-            genres = ", ".join(g.name for g in vg.genres) if vg.genres else "N/A"
-            stock_info = f"Stock: {vg.stock} unidades" if vg.stock > 0 else "SIN STOCK (0 unidades)"
-            context_parts.append(
-                f"{i}. {vg.title} — ${vg.price_clp} CLP\n"
-                f"   Géneros: {genres}\n"
-                f"   {vg.description}\n"
-                f"   {stock_info}"
-            )
-        context = "\n\n".join(context_parts) if context_parts else "No se encontraron videojuegos relevantes."
+        # Resolución inteligente y sincronizada del videojuego objetivo
+        target = resolve_target_game(query, chat_history=chat_history, candidates=candidates)
+        video_games, context = align_catalog_context(target, candidates)
 
-        # Conocimiento externo (Wikipedia) optimizado por Laya AI
-        external_context = "Sin datos externos."
-        if video_games and self._external_knowledge and need_trivia and (intent != "greeting"):
-            try:
-                external_context = await self._external_knowledge.fetch_trivia(video_games[0].title)
-            except Exception as e:
-                logger.debug("External knowledge fetch error in stream: %s", e)
+        target_topic = target.title
+        target_price = target.price_clp
+        should_fetch_trivia = need_trivia and (intent != "greeting")
 
-        # Noticias de videojuegos en tiempo real (Tavily API)
-        gaming_news = "Sin noticias adicionales."
-        if self._gaming_news and (intent != "greeting"):
-            target_topic = video_games[0].title if video_games else query
-            try:
-                gaming_news = await self._gaming_news.fetch_news(target_topic)
-            except Exception as e:
-                logger.debug("Gaming news fetch error in stream (Tavily): %s", e)
+        # Concurrencia máxima: Wikipedia, Tavily y CheapShark en paralelo con asyncio.gather
+        async def _fetch_wiki() -> str:
+            if self._external_knowledge and should_fetch_trivia and target_topic:
+                try:
+                    return await self._external_knowledge.fetch_trivia(target_topic)
+                except Exception as e:
+                    logger.debug("External knowledge fetch error in stream: %s", e)
+            return "Sin datos externos."
 
-        # Comparativa de precios con otras tiendas (CheapShark API - Steam, Epic, GOG, etc.)
-        price_comparison = "Sin datos comparativos de otras tiendas."
-        if self._price_comparison and (intent != "greeting"):
-            target_title = video_games[0].title if video_games else query
-            target_price = video_games[0].price_clp if video_games else 0
-            try:
-                comp_data = await self._price_comparison.compare_price(target_title, target_price)
-                if comp_data.get("has_data"):
-                    price_comparison = comp_data.get("comparison_summary", price_comparison)
-            except Exception as e:
-                logger.debug("Price comparison fetch error in stream (CheapShark): %s", e)
+        async def _fetch_news() -> str:
+            if self._gaming_news and (intent != "greeting") and target_topic:
+                try:
+                    return await self._gaming_news.fetch_news(target_topic)
+                except Exception as e:
+                    logger.debug("Gaming news fetch error in stream (Tavily): %s", e)
+            return "Sin noticias adicionales."
+
+        async def _fetch_prices() -> str:
+            if self._price_comparison and (intent != "greeting") and target_topic:
+                try:
+                    comp_data = await self._price_comparison.compare_price(target_topic, target_price)
+                    if comp_data.get("has_data"):
+                        return comp_data.get("comparison_summary", "Sin datos comparativos de otras tiendas.")
+                except Exception as e:
+                    logger.debug("Price comparison fetch error in stream (CheapShark): %s", e)
+            return "Sin datos comparativos de otras tiendas."
+
+        external_context, gaming_news, price_comparison = await asyncio.gather(
+            _fetch_wiki(),
+            _fetch_news(),
+            _fetch_prices(),
+        )
 
         # Orquestación multi-agente CrewAI
         crew_analysis = ""
-        if settings.ENABLE_CREWAI_ORCHESTRATION and video_games and (intent != "greeting"):
+        if settings.ENABLE_CREWAI_ORCHESTRATION and video_games and (intent not in ("greeting", "support", "stock_price", "send_email")):
             underlying_llm = getattr(self._llm, "llm", None)
             crew_analysis = await run_nexus_crew(
                 query=query,
@@ -282,27 +288,25 @@ class AssistantService:
                 llm=underlying_llm,
             )
 
-        history_text = ""
-        if chat_history:
-            history_lines = [f"{m.role}: {m.content}" for m in chat_history[-6:]]
-            history_text = "\n".join(history_lines)
+        user_message = build_unified_user_message(
+            query=query,
+            target=target,
+            intent=intent,
+            context=context,
+            external_context=external_context,
+            gaming_news=gaming_news,
+            price_comparison=price_comparison,
+            crew_analysis=crew_analysis,
+            chat_history=chat_history,
+        )
 
-        user_message_parts = [
-            f"Historial de conversación:\n{history_text}\n",
-            f"Intención detectada (Laya AI): {intent}\n",
-            f"Videojuegos disponibles:\n{context}\n",
-        ]
-        if external_context and external_context != "Sin datos externos.":
-            user_message_parts.append(f"Dato curioso externo (Wikipedia):\n{external_context}\n")
-        if gaming_news and "Sin noticias" not in gaming_news:
-            user_message_parts.append(f"Noticias recientes de videojuegos (Tavily API):\n{gaming_news}\n")
-        if price_comparison and "Sin datos" not in price_comparison:
-            user_message_parts.append(f"Comparativa de precios con otras tiendas (CheapShark API):\n{price_comparison}\n")
-        if crew_analysis:
-            user_message_parts.append(f"Análisis estratégico:\n{crew_analysis}\n")
-        user_message_parts.append(f"Pregunta del cliente: {query}")
-
-        user_message = "\n".join(user_message_parts)
+        system_prompt = SYSTEM_PROMPT.format(
+            context=context,
+            external_context=external_context,
+            gaming_news=gaming_news,
+            price_comparison=price_comparison,
+            crew_analysis=crew_analysis or "Sin análisis estratégico adicional.",
+        )
 
         product_data = [
             {"id": str(vg.id), "title": vg.title, "price_clp": str(vg.price_clp)}

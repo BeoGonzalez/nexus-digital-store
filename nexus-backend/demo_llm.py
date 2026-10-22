@@ -41,6 +41,11 @@ from nexus_backend.ai_assistant.infrastructure.cheapshark_adapter import CheapSh
 from nexus_backend.ai_assistant.infrastructure.llm import GroqLLMAdapter
 from nexus_backend.ai_assistant.infrastructure.email_adapter import GmailEmailAdapter
 from nexus_backend.ai_assistant.application.chains import NEXUSBOT_SYSTEM_PROMPT
+from nexus_backend.ai_assistant.application.context_resolver import (
+    align_catalog_context,
+    build_unified_user_message,
+    resolve_target_game,
+)
 
 
 # Colores ANSI para terminal
@@ -157,8 +162,14 @@ async def run_demo_query(query: str, recipient_override: str | None = None):
         matched_games = [MOCK_CATALOG[0]]
 
     print(f"  • {BOLD}Fuente:{RESET} {CYAN}{source}{RESET}")
-    target_game = matched_games[0]
-    for i, g in enumerate(matched_games, 1):
+    # Resolución inteligente y centralizada del juego objetivo
+    target = resolve_target_game(query, candidates=matched_games)
+    aligned_games, catalog_context = align_catalog_context(target, matched_games)
+    target_game = aligned_games[0]
+
+    status_str = f"Disponible en Nexus (${target.price_clp:,} CLP)" if target.is_in_catalog else "Juego externo"
+    print(f"  • {BOLD}🎯 Videojuego objetivo resuelto:{RESET} {GREEN}{BOLD}{target.title}{RESET} ({CYAN}{status_str}{RESET}, fuente: {target.source})".replace(",", "."))
+    for i, g in enumerate(aligned_games[:3], 1):
         genres_str = ", ".join(gen.name for gen in g.genres) if g.genres else "General"
         print(f"  {i}. {BOLD}{g.title}{RESET} — {GREEN}${g.price_clp:,} CLP{RESET} (Stock: {g.stock}) [{DIM}{genres_str}{RESET}]".replace(",", "."))
     print()
@@ -169,9 +180,9 @@ async def run_demo_query(query: str, recipient_override: str | None = None):
     print(f"{CYAN}{BOLD}[PASO 3] 📚 Wikipedia API (Lore & Trivia Gamer){RESET}")
     wiki = WikipediaAdapter()
     trivia_context = "Sin datos externos."
-    if need_trivia and intent != "greeting":
+    if need_trivia and intent != "greeting" and target.title:
         try:
-            trivia_context = await wiki.fetch_trivia(target_game.title)
+            trivia_context = await wiki.fetch_trivia(target.title)
             snippet = trivia_context[:160] + "..." if len(trivia_context) > 160 else trivia_context
             print(f"  • {BOLD}Contexto histórico:{RESET} {snippet}")
         except Exception as e:
@@ -186,9 +197,9 @@ async def run_demo_query(query: str, recipient_override: str | None = None):
     print(f"{GREEN}{BOLD}[PASO 4] 📰 Tavily API (Noticias en Tiempo Real & Parches){RESET}")
     tavily = TavilyNewsAdapter(api_key=settings.TAVILY_API_KEY, max_results=2)
     news_context = "Sin noticias adicionales."
-    if intent != "greeting":
+    if intent != "greeting" and target.title:
         try:
-            news_context = await tavily.fetch_news(target_game.title)
+            news_context = await tavily.fetch_news(target.title)
             lines = news_context.strip().split("\n")
             for line in lines[:3]:
                 print(f"  • {line}")
@@ -204,9 +215,9 @@ async def run_demo_query(query: str, recipient_override: str | None = None):
     print(f"{YELLOW}{BOLD}[PASO 5] 🏷️ CheapShark API (Comparativa en Vivo: Steam, Epic, GOG){RESET}")
     cheapshark = CheapSharkPriceAdapter(usd_clp_rate=settings.CHEAPSHARK_USD_CLP_RATE)
     price_context = "Sin datos comparativos."
-    if intent != "greeting":
+    if intent != "greeting" and target.title:
         try:
-            comp = await cheapshark.compare_price(target_game.title, target_game.price_clp)
+            comp = await cheapshark.compare_price(target.title, target.price_clp)
             if comp.get("has_data"):
                 verdict = comp.get("verdict", "N/A")
                 verdict_color = GREEN if verdict == "MÁS BARATO" else (RED if verdict == "MÁS CARO" else YELLOW)
@@ -222,7 +233,7 @@ async def run_demo_query(query: str, recipient_override: str | None = None):
 
                 price_context = comp.get("comparison_summary", price_context)
             else:
-                print(f"  • {DIM}No se encontraron ofertas activas en CheapShark para '{target_game.title}'.{RESET}")
+                print(f"  • {DIM}No se encontraron ofertas activas en CheapShark para '{target.title}'.{RESET}")
         except Exception as e:
             print(f"  • {YELLOW}CheapShark API error:{RESET} {e}")
     else:
@@ -235,15 +246,22 @@ async def run_demo_query(query: str, recipient_override: str | None = None):
     print(f"{CYAN}{BOLD}[PASO 6] ⚡ Generación del LLM (NexusBot con Todo el Contexto Conectado){RESET}")
     print(f"{DIM}Enviando System Prompt + Contexto a Groq (Modelo: {settings.GROQ_MODEL_NAME})...{RESET}\n")
 
-    catalog_text = f"• {target_game.title} — ${target_game.price_clp:,} CLP (Stock: {target_game.stock})\n  {target_game.description}".replace(",", ".")
+    user_message = build_unified_user_message(
+        query=query,
+        target=target,
+        intent=intent,
+        context=catalog_context,
+        external_context=trivia_context,
+        gaming_news=news_context,
+        price_comparison=price_context,
+    )
 
-    user_message = (
-        f"Intención del cliente (Laya AI): {intent}\n\n"
-        f"Videojuegos disponibles en tienda:\n{catalog_text}\n\n"
-        f"Dato curioso externo (Wikipedia):\n{trivia_context}\n\n"
-        f"Noticias recientes de videojuegos (Tavily API):\n{news_context}\n\n"
-        f"Comparativa de precios con otras tiendas (CheapShark API):\n{price_context}\n\n"
-        f"Pregunta del cliente: {query}"
+    formatted_system_prompt = NEXUSBOT_SYSTEM_PROMPT.format(
+        context=catalog_context,
+        external_context=trivia_context,
+        gaming_news=news_context,
+        price_comparison=price_context,
+        crew_analysis="Sin análisis estratégico adicional.",
     )
 
     llm = GroqLLMAdapter(
@@ -257,7 +275,7 @@ async def run_demo_query(query: str, recipient_override: str | None = None):
 
     generated_text_chunks: list[str] = []
     try:
-        async for chunk in llm.generate_stream(NEXUSBOT_SYSTEM_PROMPT, user_message):
+        async for chunk in llm.generate_stream(formatted_system_prompt, user_message):
             print(chunk, end="", flush=True)
             generated_text_chunks.append(chunk)
         print(f"{RESET}\n")
