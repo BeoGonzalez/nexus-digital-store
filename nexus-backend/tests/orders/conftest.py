@@ -17,7 +17,7 @@ from nexus_backend.main import app
 @pytest.fixture
 def dummy_customer_user() -> User:
     return User(
-        id=UUID("33333333-3333-3333-3333-333333333333"),
+        id="33333333-3333-3333-3333-333333333333",
         name="Nexus Customer",
         email="customer@nexus.cl",
         role="user",

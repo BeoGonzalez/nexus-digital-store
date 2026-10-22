@@ -12,10 +12,19 @@ class Settings(BaseSettings):
     APP_NAME: str = "Nexus Digital Store"
     DEBUG: bool = False
 
-    # Neon format: postgresql+asyncpg://<user>:<password>@<host>.neon.tech/<dbname>?ssl=require
+    # Database (Amazon Aurora PostgreSQL / asyncpg)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/nexus"
-    NEON_POOLED: bool = False  # True = usar endpoint -pooler de Neon (pgbouncer)
-    NEON_AUTH_URL: str = "https://ep-winter-dust-aylq45fu.neonauth.c-5.us-east-2.aws.neon.tech/neondb/auth"
+    DATABASE_READ_URL: str | None = None
+    DB_SSL: bool = False
+    RUN_DB_INIT: bool = True
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 5
+
+    # AWS Cognito Identity
+    COGNITO_REGION: str = "us-east-1"
+    COGNITO_USER_POOL_ID: str = ""
+    COGNITO_APP_CLIENT_ID: str = ""
+    COGNITO_APP_CLIENT_SECRET: str = ""
 
     JWT_SECRET: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
@@ -45,6 +54,14 @@ class Settings(BaseSettings):
     WIKIPEDIA_TOP_K: int = 1
     WIKIPEDIA_MAX_CHARS: int = 400
 
+    # Tavily Gaming News API
+    TAVILY_API_KEY: str = ""
+    TAVILY_MAX_RESULTS: int = 3
+
+    # CheapShark Video Game Deals & Price Comparison API
+    CHEAPSHARK_ENABLED: bool = True
+    CHEAPSHARK_USD_CLP_RATE: float = 950.0
+
     # Multi-Agent Orchestration (CrewAI + LangGraph)
     ENABLE_CREWAI_ORCHESTRATION: bool = True
 
@@ -54,7 +71,7 @@ class Settings(BaseSettings):
 
     VECTOR_SEARCH_TOP_K: int = 5
 
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: list[str] = ["*"]
 
 
 @lru_cache

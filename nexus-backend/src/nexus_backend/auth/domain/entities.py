@@ -1,20 +1,21 @@
-from dataclasses import dataclass
-from datetime import datetime
-from uuid import UUID
-
-from nexus_backend.shared.domain.entities import BaseEntity
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from uuid import uuid4
 
 
 @dataclass
-class User(BaseEntity):
-    """Entidad de dominio User mapeada desde Neon Auth (única fuente de verdad)."""
+class User:
+    """Entidad de dominio User mapeada desde AWS Cognito."""
 
+    id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
     email: str = ""
     role: str = "user"  # 'admin', 'user', 'customer'
     banned: bool = False
     email_verified: bool = False
     image: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def is_admin(self) -> bool:

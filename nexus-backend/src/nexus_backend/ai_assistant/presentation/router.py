@@ -5,10 +5,12 @@ from langgraph.checkpoint.memory import MemorySaver
 from nexus_backend.config import get_settings
 from nexus_backend.ai_assistant.application.dtos import ChatRequest
 from nexus_backend.ai_assistant.application.services import AssistantService
+from nexus_backend.ai_assistant.infrastructure.cheapshark_adapter import CheapSharkPriceAdapter
 from nexus_backend.ai_assistant.infrastructure.embeddings import HuggingFaceEmbeddingAdapter
 from nexus_backend.ai_assistant.infrastructure.laya_adapter import LayaDecisionAdapter
 from nexus_backend.ai_assistant.infrastructure.llm import GroqLLMAdapter
 from nexus_backend.ai_assistant.infrastructure.pinecone_store import PineconeVectorStoreAdapter
+from nexus_backend.ai_assistant.infrastructure.tavily_adapter import TavilyNewsAdapter
 from nexus_backend.ai_assistant.infrastructure.wikipedia import WikipediaAdapter
 
 router = APIRouter(prefix="/assistant", tags=["AI Shopping Assistant"])
@@ -24,6 +26,22 @@ def _get_assistant_service() -> AssistantService:
         index_name=settings.PINECONE_INDEX_NAME,
         namespace=settings.PINECONE_NAMESPACE,
     )
+    gaming_news_adapter = (
+        TavilyNewsAdapter(
+            api_key=settings.TAVILY_API_KEY,
+            max_results=settings.TAVILY_MAX_RESULTS,
+        )
+        if settings.TAVILY_API_KEY
+        else None
+    )
+    price_comparison_adapter = (
+        CheapSharkPriceAdapter(
+            usd_clp_rate=settings.CHEAPSHARK_USD_CLP_RATE,
+        )
+        if settings.CHEAPSHARK_ENABLED
+        else None
+    )
+
     return AssistantService(
         embedding_port=HuggingFaceEmbeddingAdapter(model_name=settings.EMBEDDING_MODEL_NAME),
         llm_port=GroqLLMAdapter(
@@ -41,6 +59,8 @@ def _get_assistant_service() -> AssistantService:
             model_name=settings.LAYA_MODEL_NAME,
         ),
         checkpointer=_shared_checkpointer,
+        gaming_news_port=gaming_news_adapter,
+        price_comparison_port=price_comparison_adapter,
     )
 
 

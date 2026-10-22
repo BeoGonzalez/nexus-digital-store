@@ -25,12 +25,25 @@ DIRECTRICES DE VENTAS Y CATÁLOGO:
    - NUNCA respondas con frases estáticas o robóticas como "mi red neuronal se está calibrando".
 5. Integra la información externa (datos curiosos / trivia) de forma fluida y entretenida cuando aporte valor.
 6. Mantén un formato limpio con viñetas cuando listes juegos o detalles importantes.
+7. COMPARATIVA DE PRECIOS CON OTRAS TIENDAS (CheapShark API):
+   - Cuando el usuario pregunte por precios, ofertas, si un juego conviene comprarlo o si está barato o caro, o al recomendar un título:
+   - INDICA EXPLÍCITAMENTE SI EN NEXUS DIGITAL STORE ESTÁ MÁS BARATO O MÁS CARO QUE EN OTRAS TIENDAS (Steam, Epic Games Store, GOG, Humble Store, etc.).
+   - Si en Nexus está MÁS BARATO: Destaca con entusiasmo el ahorro del cliente en pesos chilenos ($ CLP) frente a las otras tiendas.
+   - Si en otra tienda está temporalmente MÁS BARATO: Sé honesto, empático y transparente con el gamer, informándole sobre la oferta externa.
+8. NOTICIAS GAMER (Tavily API):
+   - Si el usuario pregunta por novedades, lanzamientos, parches o actualidad, utiliza la sección NOTICIAS DE VIDEOJUEGOS (Tavily API) para ofrecer la información más fresca de la industria.
 
 CATÁLOGO DISPONIBLE (Interno):
 {context}
 
 DATO CURIOSO DEL JUEGO (Externo - Wikipedia):
 {external_context}
+
+NOTICIAS DE VIDEOJUEGOS (Externo - Tavily API):
+{gaming_news}
+
+COMPARATIVA DE PRECIOS CON OTRAS TIENDAS (Externo - CheapShark API):
+{price_comparison}
 
 ANÁLISIS ESTRATÉGICO DE AGENTES:
 {crew_analysis}
@@ -42,7 +55,10 @@ def build_nexusbot_prompt() -> ChatPromptTemplate:
         ("system", NEXUSBOT_SYSTEM_PROMPT),
         MessagesPlaceholder(variable_name="messages", optional=True),
         ("human", "{query}"),
-    ])
+    ]).partial(
+        gaming_news="Sin noticias adicionales.",
+        price_comparison="Sin datos comparativos de otras tiendas.",
+    )
 
 
 def build_lcel_generation_chain(llm) -> Runnable:

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Users, Search, Loader2 } from "lucide-react";
 
 export default function AdminUsersPage() {
@@ -26,7 +27,7 @@ export default function AdminUsersPage() {
         </div>
         <h3 className="text-lg font-bold text-white">Módulo en Construcción</h3>
         <p className="mt-2 max-w-sm text-sm text-white/50">
-          La gestión de usuarios mediante Neon Auth estará disponible en una próxima actualización.
+          La gestión de usuarios mediante Amazon Cognito estará disponible en una próxima actualización.
         </p>
       </div>
     </div>

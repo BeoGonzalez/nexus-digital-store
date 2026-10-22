@@ -19,10 +19,10 @@ class OrderService:
         self._order_repo = order_repo
         self._video_game_repo = video_game_repo
 
-    async def get_user_orders(self, user_id: UUID) -> list[Order]:
+    async def get_user_orders(self, user_id: str) -> list[Order]:
         return await self._order_repo.get_by_user_id(user_id)
 
-    async def create_order(self, user_id: UUID, request: CreateOrderRequest, idempotency_key: str | None = None) -> Order:
+    async def create_order(self, user_id: str, request: CreateOrderRequest, idempotency_key: str | None = None) -> Order:
         if idempotency_key:
             existing_order = await self._order_repo.get_by_idempotency_key(idempotency_key)
             if existing_order:
@@ -72,10 +72,10 @@ class PaymentMethodService:
     def __init__(self, payment_repo: "PaymentMethodRepository") -> None:
         self._payment_repo = payment_repo
 
-    async def get_user_payment_methods(self, user_id: UUID) -> list["PaymentMethod"]:
+    async def get_user_payment_methods(self, user_id: str) -> list["PaymentMethod"]:
         return await self._payment_repo.get_by_user_id(user_id)
 
-    async def add_payment_method(self, user_id: UUID, request: "CreatePaymentMethodRequest") -> "PaymentMethod":
+    async def add_payment_method(self, user_id: str, request: "CreatePaymentMethodRequest") -> "PaymentMethod":
         from nexus_backend.orders.domain.entities import PaymentMethod
         
         # Simulamos que tomamos los últimos 4 dígitos reales de un token

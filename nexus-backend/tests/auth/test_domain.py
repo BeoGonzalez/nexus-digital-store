@@ -58,6 +58,6 @@ class TestUserDomainEntity:
         is_active_result = user.is_active
 
         # Assert
-        # Regla de negocio: Un usuario baneado por Neon Auth nunca debe considerarse activo
+        # Regla de negocio: Un usuario baneado nunca debe considerarse activo
         # ni debe permitírsele interactuar con órdenes o catálogo.
         assert is_active_result is expected_is_active

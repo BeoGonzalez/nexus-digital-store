@@ -26,8 +26,8 @@ class OrderModel(TimestampMixin, Base):
         ),
     )
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("neon_auth.user.id", ondelete="RESTRICT"), nullable=False, index=True,
+    user_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True,
     )
     total_amount_clp: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[OrderStatus] = mapped_column(
@@ -44,7 +44,6 @@ class OrderModel(TimestampMixin, Base):
     )
     idempotency_key: Mapped[str | None] = mapped_column(String(36), unique=True, nullable=True)
 
-    user: Mapped["NeonAuthUserModel"] = relationship(back_populates="orders")  # noqa: F821
     items: Mapped[list["OrderItemModel"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin",
     )
@@ -100,15 +99,13 @@ class OrderItemModel(TimestampMixin, Base):
 class PaymentMethodModel(TimestampMixin, Base):
     __tablename__ = "payment_methods"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("neon_auth.user.id", ondelete="CASCADE"), nullable=False, index=True,
+    user_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True,
     )
     method_type: Mapped[str] = mapped_column(String(50), nullable=False, server_default="CREDIT_CARD")
     card_last_4: Mapped[str] = mapped_column(String(4), nullable=False)
     card_brand: Mapped[str] = mapped_column(String(50), nullable=False)
     is_default: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
-
-    user: Mapped["NeonAuthUserModel"] = relationship()  # noqa: F821
 
     def __repr__(self) -> str:
         return f"<PaymentMethod user={self.user_id} last4={self.card_last_4}>"

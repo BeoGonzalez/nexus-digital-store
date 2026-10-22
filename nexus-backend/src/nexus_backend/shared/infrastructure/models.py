@@ -13,7 +13,7 @@ class TimestampMixin:
     """Mixin de auditoría reutilizable — UUID v4 + timestamps server-side.
 
     • gen_random_uuid(): función nativa de Postgres ≥13 (sin extensión).
-      Neon la soporta out-of-the-box.
+      PostgreSQL la soporta out-of-the-box.
     • server_default=text("now()"): garantiza que el timestamp se genera
       en el servidor, no en el cliente Python, evitando desincronización
       de relojes en arquitectura serverless distribuida.

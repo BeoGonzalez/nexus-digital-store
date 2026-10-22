@@ -9,15 +9,17 @@ from nexus_backend.config import get_settings
 class GroqLLMAdapter:
     def __init__(
         self,
-        api_key: str,
-        model_name: str,
+        api_key: str | None = None,
+        model_name: str | None = None,
         temperature: float | None = None,
     ) -> None:
         settings = get_settings()
         self._temp = temperature if temperature is not None else settings.GROQ_TEMPERATURE
+        key = api_key or settings.GROQ_API_KEY or "gsk_dummy_test_key_for_groq"
+        model = model_name or settings.GROQ_MODEL_NAME
         self._llm = ChatGroq(
-            api_key=api_key,
-            model=model_name,
+            api_key=key,
+            model=model,
             temperature=self._temp,
             max_tokens=1024,
             streaming=True,

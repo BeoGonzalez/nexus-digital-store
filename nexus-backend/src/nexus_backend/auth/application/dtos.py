@@ -14,7 +14,10 @@ class UserResponse(BaseModel):
 
 
 class AuthInfoResponse(BaseModel):
-    neon_auth_url: str
+    auth_provider: str = "Amazon Cognito"
+    cognito_region: str
+    cognito_user_pool_id: str
+    cognito_app_client_id: str
     message: str
 
 

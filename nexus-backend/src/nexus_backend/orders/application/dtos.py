@@ -21,7 +21,7 @@ class CreatePaymentMethodRequest(BaseModel):
 
 class PaymentMethodResponse(BaseModel):
     id: UUID
-    user_id: UUID
+    user_id: str
     card_last_4: str
     card_brand: str
     is_default: bool
@@ -43,7 +43,7 @@ class OrderItemResponse(BaseModel):
 
 class OrderResponse(BaseModel):
     id: UUID
-    user_id: UUID
+    user_id: str
     total_amount_clp: int
     status: str
     items: list[OrderItemResponse]

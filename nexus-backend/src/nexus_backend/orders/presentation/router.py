@@ -41,7 +41,7 @@ def _to_response(order: Order) -> OrderResponse:
         
     return OrderResponse(
         id=order.id,
-        user_id=order.user_id,
+        user_id=str(order.user_id) if order.user_id else "",
         total_amount_clp=order.total_amount_clp,
         status=order.status,
         items=items_resp,
@@ -54,7 +54,7 @@ async def get_user_orders(
     service: OrderService = Depends(_get_order_service),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    orders = await service.get_user_orders(current_user.id)
+    orders = await service.get_user_orders(str(current_user.id))
     return [_to_response(o) for o in orders]
 
 
@@ -67,7 +67,7 @@ async def create_order(
     service: OrderService = Depends(_get_order_service),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    order = await service.create_order(current_user.id, body, idempotency_key=idempotency_key)
+    order = await service.create_order(str(current_user.id), body, idempotency_key=idempotency_key)
     return _to_response(order)
 
 
@@ -88,7 +88,7 @@ def _get_payment_service(session: AsyncSession = Depends(get_db_session)) -> Pay
 def _to_payment_response(pm: PaymentMethod) -> PaymentMethodResponse:
     return PaymentMethodResponse(
         id=pm.id,
-        user_id=pm.user_id,
+        user_id=str(pm.user_id) if pm.user_id else "",
         card_last_4=pm.card_last_4,
         card_brand=pm.card_brand,
         is_default=pm.is_default,
@@ -100,7 +100,7 @@ async def get_payment_methods(
     service: PaymentMethodService = Depends(_get_payment_service),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    methods = await service.get_user_payment_methods(current_user.id)
+    methods = await service.get_user_payment_methods(str(current_user.id))
     return [_to_payment_response(pm) for pm in methods]
 
 
@@ -110,5 +110,5 @@ async def create_payment_method(
     service: PaymentMethodService = Depends(_get_payment_service),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    pm = await service.add_payment_method(current_user.id, body)
+    pm = await service.add_payment_method(str(current_user.id), body)
     return _to_payment_response(pm)

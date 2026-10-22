@@ -14,7 +14,13 @@ try:
 except Exception:
     pass
 
-from crewai import Agent, Crew, Process, Task
+try:
+    from crewai import Agent, Crew, Process, Task
+except ImportError:
+    Agent = Any  # type: ignore
+    Crew = Any  # type: ignore
+    Process = Any  # type: ignore
+    Task = Any  # type: ignore
 from nexus_backend.config import get_settings
 
 logger = logging.getLogger(__name__)
