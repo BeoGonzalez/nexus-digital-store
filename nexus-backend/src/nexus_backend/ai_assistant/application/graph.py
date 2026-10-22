@@ -12,6 +12,7 @@ from nexus_backend.ai_assistant.application.crew import run_nexus_crew
 from nexus_backend.ai_assistant.domain.entities import AssistantState, ChatMessage
 from nexus_backend.ai_assistant.domain.ports import (
     DecisionEnginePort,
+    EmailPort,
     EmbeddingPort,
     ExternalKnowledgePort,
     GamingNewsPort,
@@ -34,6 +35,7 @@ def build_rag_graph(
     decision_port: DecisionEnginePort | None = None,
     gaming_news_port: GamingNewsPort | None = None,
     price_comparison_port: PriceComparisonPort | None = None,
+    email_port: EmailPort | None = None,
 ) -> StateGraph:
     settings = get_settings()
 
@@ -72,36 +74,43 @@ def build_rag_graph(
 
         context = "\n\n".join(context_parts) if context_parts else "No se encontraron videojuegos relevantes."
 
-        # Búsqueda externa en Wikipedia (optimizado por System 1 de Laya AI)
-        external_context = "Sin datos externos."
+        # Ejecución en paralelo concurrente de Wikipedia, Tavily y CheapShark
+        target_topic = video_games[0].title if video_games else query
+        target_price = video_games[0].price_clp if video_games else 0
         should_fetch_trivia = decision_metrics.get("need_trivia", True) and (intent != "greeting")
-        if video_games and external_knowledge_port and should_fetch_trivia:
-            top_title = video_games[0].title
-            try:
-                external_context = await external_knowledge_port.fetch_trivia(top_title)
-            except Exception as e:
-                logger.debug("External knowledge fetch error: %s", e)
 
-        # Búsqueda de noticias gamer en tiempo real (Tavily API)
-        gaming_news = "Sin noticias adicionales."
-        if gaming_news_port and (intent != "greeting"):
-            target_topic = video_games[0].title if video_games else query
-            try:
-                gaming_news = await gaming_news_port.fetch_news(target_topic)
-            except Exception as e:
-                logger.debug("Gaming news fetch error (Tavily): %s", e)
+        async def _fetch_wiki() -> str:
+            if video_games and external_knowledge_port and should_fetch_trivia:
+                try:
+                    return await external_knowledge_port.fetch_trivia(video_games[0].title)
+                except Exception as e:
+                    logger.debug("External knowledge fetch error: %s", e)
+            return "Sin datos externos."
 
-        # Comparativa de precios con otras tiendas (CheapShark API - Steam, Epic, GOG, etc.)
-        price_comparison = "Sin datos comparativos de otras tiendas."
-        if price_comparison_port and (intent != "greeting"):
-            target_title = video_games[0].title if video_games else query
-            target_price = video_games[0].price_clp if video_games else 0
-            try:
-                comp_data = await price_comparison_port.compare_price(target_title, target_price)
-                if comp_data.get("has_data"):
-                    price_comparison = comp_data.get("comparison_summary", price_comparison)
-            except Exception as e:
-                logger.debug("Price comparison error (CheapShark): %s", e)
+        async def _fetch_news() -> str:
+            if gaming_news_port and (intent != "greeting"):
+                try:
+                    return await gaming_news_port.fetch_news(target_topic)
+                except Exception as e:
+                    logger.debug("Gaming news fetch error (Tavily): %s", e)
+            return "Sin noticias adicionales."
+
+        async def _fetch_prices() -> str:
+            if price_comparison_port and (intent != "greeting"):
+                try:
+                    comp_data = await price_comparison_port.compare_price(target_topic, target_price)
+                    if comp_data.get("has_data"):
+                        return comp_data.get("comparison_summary", "Sin datos comparativos de otras tiendas.")
+                except Exception as e:
+                    logger.debug("Price comparison error (CheapShark): %s", e)
+            return "Sin datos comparativos de otras tiendas."
+
+        import asyncio
+        external_context, gaming_news, price_comparison = await asyncio.gather(
+            _fetch_wiki(),
+            _fetch_news(),
+            _fetch_prices(),
+        )
 
         logger.info("Retrieved %d games for query: %s (intent=%s)", len(video_games), query[:80], intent)
         return {
@@ -119,8 +128,11 @@ def build_rag_graph(
         external_context = state.get("external_context", "")
         intent = state.get("intent", "recommendation")
 
-        if intent == "greeting" and "No se encontraron" in catalog_context:
-            return {"crew_analysis": "Saludo cordial de bienvenida al usuario."}
+        if not settings.ENABLE_CREWAI_ORCHESTRATION:
+            return {"crew_analysis": ""}
+
+        if intent in ("greeting", "support", "stock_price", "send_email") or "No se encontraron" in catalog_context:
+            return {"crew_analysis": ""}
 
         underlying_llm = getattr(llm_port, "llm", None)
         crew_analysis = await run_nexus_crew(
@@ -199,6 +211,29 @@ def build_rag_graph(
             async for chunk in llm_port.generate_stream(SYSTEM_PROMPT, user_message):
                 chunks.append(chunk)
             full_response = "".join(chunks)
+
+        # Si la consulta solicita enviar correo y hay un destinatario configurado o detectado
+        recipient_email = (state.get("decision_metrics") or {}).get("recipient_email")
+        if not recipient_email:
+            import re
+            m = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", query)
+            recipient_email = m.group(0) if m else None
+
+        if email_port and recipient_email:
+            try:
+                top_game_title = (state.get("retrieved_products") or [None])[0]
+                game_subject = f": {top_game_title.title}" if top_game_title else ""
+                subject = f"🎮 Nexus Digital Store — Recomendación & Ofertas{game_subject}"
+                mail_res = await email_port.send_email(
+                    to_email=recipient_email,
+                    subject=subject,
+                    content_html=full_response,
+                    content_text=full_response,
+                )
+                if mail_res.get("success"):
+                    full_response += f"\n\n✉️ *¡Listo! Te acabo de enviar esta recomendación y ofertas a tu correo ({recipient_email}).*"
+            except Exception as mail_exc:
+                logger.debug("Error enviando correo desde LangGraph: %s", mail_exc)
 
         # Actualizar historial serializable para el checkpointer de LangGraph (MemorySaver)
         updated_history = [

@@ -41,6 +41,12 @@ def _get_assistant_service() -> AssistantService:
         if settings.CHEAPSHARK_ENABLED
         else None
     )
+    from nexus_backend.ai_assistant.infrastructure.email_adapter import GmailEmailAdapter
+    email_adapter = (
+        GmailEmailAdapter()
+        if (settings.SMTP_USER or settings.GMAIL_USER)
+        else None
+    )
 
     return AssistantService(
         embedding_port=HuggingFaceEmbeddingAdapter(model_name=settings.EMBEDDING_MODEL_NAME),
@@ -61,6 +67,7 @@ def _get_assistant_service() -> AssistantService:
         checkpointer=_shared_checkpointer,
         gaming_news_port=gaming_news_adapter,
         price_comparison_port=price_comparison_adapter,
+        email_port=email_adapter,
     )
 
 
