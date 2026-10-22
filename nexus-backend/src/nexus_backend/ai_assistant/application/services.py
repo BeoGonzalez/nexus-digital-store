@@ -10,6 +10,7 @@ from nexus_backend.ai_assistant.application.graph import SYSTEM_PROMPT, build_ra
 from nexus_backend.ai_assistant.domain.entities import AssistantState, ChatMessage
 from nexus_backend.ai_assistant.domain.ports import (
     DecisionEnginePort,
+    EmailPort,
     EmbeddingPort,
     ExternalKnowledgePort,
     GamingNewsPort,
@@ -33,6 +34,7 @@ class AssistantService:
         checkpointer: MemorySaver | None = None,
         gaming_news_port: GamingNewsPort | None = None,
         price_comparison_port: PriceComparisonPort | None = None,
+        email_port: EmailPort | None = None,
     ) -> None:
         self._embedding = embedding_port
         self._llm = llm_port
@@ -41,6 +43,7 @@ class AssistantService:
         self._decision = decision_port
         self._gaming_news = gaming_news_port
         self._price_comparison = price_comparison_port
+        self._email = email_port
         self._checkpointer = checkpointer if checkpointer is not None else MemorySaver()
         self._graph = build_rag_graph(
             embedding_port,
@@ -50,6 +53,7 @@ class AssistantService:
             decision_port,
             gaming_news_port,
             price_comparison_port,
+            email_port,
         ).compile(checkpointer=self._checkpointer)
 
     @staticmethod

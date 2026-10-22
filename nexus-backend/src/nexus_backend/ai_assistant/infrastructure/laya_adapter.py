@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 from nexus_backend.ai_assistant.domain.ports import DecisionEnginePort
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_ROUTER_CRITERIA = {
     "recommendation": "El usuario busca recomendaciones de videojuegos, novedades, opiniones o sugerencias de qué jugar.",
     "stock_price": "El usuario pregunta específicamente por el precio, descuento, disponibilidad o stock de un videojuego en particular.",
+    "send_email": "El usuario solicita explícitamente enviar por correo electrónico información, resumen, ofertas o recomendaciones.",
     "greeting": "El usuario saluda (hola, buenos días, qué tal), se despide o expresa cortesía básica.",
     "support": "El usuario consulta por pedidos, compras previas, medios de pago, soporte o temas fuera de catálogo.",
 }
@@ -60,6 +62,9 @@ class LayaDecisionAdapter(DecisionEnginePort):
 
     def _heuristic_classify(self, query: str) -> str:
         q = query.strip().lower()
+        # Envío de correo electrónico (prioritario si contiene dirección o intención de envío)
+        if any(w in q for w in ["enviar correo", "mandar correo", "enviame un correo", "mandame un correo", "al correo", "a mi correo", "al mail", "a mi email", "enviame el mail", "mandame el correo"]) or ("@" in q and any(w in q for w in ["enviar", "manda", "envia", "mail", "correo"])):
+            return "send_email"
         # Saludos
         if any(w in q for w in ["hola", "buenos dias", "buenas tardes", "buenas noches", "hey", "saludos", "chao", "adios"]):
             if len(q.split()) <= 4:
@@ -95,13 +100,17 @@ class LayaDecisionAdapter(DecisionEnginePort):
 
     async def evaluate_decision(self, query: str) -> dict:
         intent = await self.classify_intent(query)
-        need_trivia = intent in ("recommendation", "stock_price")
-        urgency = 2 if intent == "stock_price" else 1
+        need_trivia = intent in ("recommendation", "stock_price", "send_email")
+        urgency = 2 if intent in ("stock_price", "send_email") else 1
+
+        email_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", query)
+        recipient_email = email_match.group(0) if email_match else None
 
         return {
             "intent": intent,
             "need_trivia": need_trivia,
             "urgency": urgency,
             "engine": "laya-ai (system-1)",
+            "recipient_email": recipient_email,
         }
 

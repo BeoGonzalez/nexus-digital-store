@@ -40,3 +40,13 @@ class DecisionEnginePort(Protocol):
     async def classify_intent(self, query: str) -> str: ...
 
     async def evaluate_decision(self, query: str) -> dict: ...
+
+
+class EmailPort(Protocol):
+    async def send_email(
+        self,
+        to_email: str,
+        subject: str,
+        content_html: str,
+        content_text: str = "",
+    ) -> dict: ...

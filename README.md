@@ -10,9 +10,10 @@ Nexus combina lo mejor del desarrollo web moderno, arquitectura limpia y pipelin
 
 ```mermaid
 flowchart TB
-    subgraph Clients ["Capas de Presentación (Frontend)"]
+    subgraph Clients ["Capas de Presentación (Frontend & Observabilidad)"]
         Storefront["🌐 Next.js 16 Storefront\n(React 19, Tailwind, 3D Canvas, SSE Client)"]
         AdminPanel["🛡️ Admin Dashboard\n(/admin/games — RBAC con Cognito)"]
+        NexusAI["📊 nexus-ai Lab (Streamlit)\n(Dashboard Interactivo & Inspección RAG)"]
     end
 
     subgraph AWS_Networking ["Red & Balanceo (AWS Cloud)"]
@@ -54,6 +55,8 @@ flowchart TB
     %% Flujos de clientes
     Storefront -->|HTTPS / SSE Streaming| ALB
     AdminPanel -->|Admin REST Requests| ALB
+    NexusAI -.->|Test de Pipeline / Chat SSE| ALB
+    NexusAI -.->|Inspección Directa de RAG| Pinecone
     ALB --> Router
     
     %% Autenticación
@@ -128,80 +131,123 @@ nexus/
 
 ```mermaid
 flowchart TD
-    subgraph Clients_Observability ["Clientes & Observabilidad"]
-        Storefront["🌐 Next.js Storefront\n(Chat UI Reactivo & SSE)"]
-        NexusAI["📊 nexus-ai Lab (Streamlit)\n(Inspección de Prompts, RAG & Agentes)"]
-        LangSmith["📈 LangSmith Observability\n(Tracing V2 & Trazabilidad de Grafos)"]
+    subgraph Clients_Observability ["Capas de Consumo & Observabilidad (Monorepo)"]
+        Storefront["🌐 nexus-frontend (Next.js 16)\n(Chat UI Gamer, Tarjetas de Producto & SSE)"]
+        NexusAI["📊 nexus-ai Lab (Streamlit App)\n(Inspección de Prompts, RAG, Agentes & Trazas)"]
+        LangSmith["📈 LangSmith Observability\n(Tracing V2 & Trazabilidad de Grafos en Vivo)"]
     end
 
-    subgraph LangGraph_Core ["🔄 LangGraph StateGraph (Macro-Orquestador de Estado Multi-Turno)"]
+    subgraph Backend_Hexagonal ["⚙️ nexus-backend Core (FastAPI — Módulo ai_assistant)"]
         direction TB
-        
-        subgraph Memory ["Persistencia de Memoria Multi-Turno"]
-            Checkpointer[("💾 MemorySaver Checkpointer\n(thread_id / session_id)")]
+
+        subgraph Presentation_Layer ["Presentation Layer"]
+            Router["🛣️ Router SSE: /api/v1/assistant/chat\n(StreamingResponse text/event-stream)"]
         end
 
-        %% Nodo 1
-        subgraph Node_Decide ["Nodo 1: decide (System 1 — Laya AI)"]
-            LayaEngine["🧠 Laya AI Decision Engine\n(Clasificación Reflexiva en Microsegundos)"]
-            IntentCheck{"¿Intención?"}
-            LayaEngine --> IntentCheck
-        end
-
-        %% Nodo 2
-        subgraph Node_Retrieve ["Nodo 2: retrieve (RAG Multifuente & APIs Externas)"]
+        subgraph Application_Layer ["Application Layer — Orquestadores de IA"]
             direction TB
-            HF_Embed["📐 HuggingFace MiniLM-L12\n(Embeddings 384d)"]
-            PineconeDB[("🌲 Pinecone Vector DB\n(Catálogo de Juegos)")]
-            WikiAPI["📚 Wikipedia API\n(Lore, Curiosidades & Trivia)"]
-            TavilyAPI["📰 Tavily AI Search API\n(Noticias de Última Hora & Parches)"]
-            CheapSharkAPI["🏷️ CheapShark API\n(Steam, Epic, GOG — MÁS BARATO / CARO)"]
             
-            HF_Embed --> PineconeDB
+            subgraph MemorySaver_Box ["Persistencia de Memoria Multi-Turno"]
+                Checkpointer[("💾 MemorySaver Checkpointer\n(Checkpoints por thread_id / session_id)")]
+            end
+
+            subgraph LangGraph_Engine ["🔄 LangGraph StateGraph (Macro-Orquestador de Estado)"]
+                direction TB
+
+                %% Nodo 1: Laya AI
+                subgraph Node_Decide ["Nodo 1: decide (System 1 — Laya AI)"]
+                    LayaEngine["🧠 LayaDecisionAdapter\n(Clasificación Reflexiva en Microsegundos)"]
+                    IntentRouter{"¿Intención?"}
+                    LayaEngine --> IntentRouter
+                end
+
+                %% Nodo 2: RAG Multifuente
+                subgraph Node_Retrieve ["Nodo 2: retrieve (RAG Multifuente & APIs Externas)"]
+                    direction TB
+                    RAG_Dispatcher["📡 Dispatcher RAG Concurrente"]
+                    Port_Embed["📐 EmbeddingPort (MiniLM-L12 384d)"]
+                    Port_Pinecone["🌲 VectorStorePort (Pinecone)"]
+                    Port_Wiki["📚 ExternalKnowledgePort (Wikipedia)"]
+                    Port_Tavily["📰 GamingNewsPort (Tavily AI)"]
+                    Port_CheapShark["🏷️ PriceComparisonPort (CheapShark)"]
+
+                    RAG_Dispatcher --> Port_Embed --> Port_Pinecone
+                    RAG_Dispatcher --> Port_Wiki
+                    RAG_Dispatcher --> Port_Tavily
+                    RAG_Dispatcher --> Port_CheapShark
+                end
+
+                %% Nodo 3: CrewAI
+                subgraph Node_Orchestrate ["Nodo 3: orchestrate (System 2 — CrewAI Multi-Agente)"]
+                    direction LR
+                    Agent_Catalog["📦 Catalog & Inventory Analyst\n(Valida Stock & Precios)"]
+                    Agent_Culture["🎮 Gaming Culture Researcher\n(Lore & Preferencias del Gamer)"]
+                    Agent_Sales["💼 Senior Sales Strategist\n(Argumentos de Venta Éticos)"]
+
+                    Agent_Catalog --> Agent_Culture --> Agent_Sales
+                end
+
+                %% Nodo 4: Generación LCEL
+                subgraph Node_Generate ["Nodo 4: generate (LCEL Chain & Groq LPU)"]
+                    LCEL_Chain["⛓️ LCEL Composable Chain\n(build_nexusbot_prompt + System Prompt Enriquecido)"]
+                    LLM_Port["⚡ LLMPort (GroqLLMAdapter — ChatGroq)"]
+                    LCEL_Chain --> LLM_Port
+                end
+            end
         end
 
-        %% Nodo 3
-        subgraph Node_Orchestrate ["Nodo 3: orchestrate (System 2 — CrewAI Multi-Agente)"]
-            direction LR
-            Agent1["📦 Inventory Analyst\n(Valida Stock Real)"]
-            Agent2["🎮 Lore Researcher\n(Cultura Gamer)"]
-            Agent3["💼 Sales Strategist\n(Argumentos Éticos)"]
-            
-            Agent1 --> Agent2 --> Agent3
-        end
-
-        %% Nodo 4
-        subgraph Node_Generate ["Nodo 4: generate (LCEL Chain & Groq LPU)"]
-            LCEL["⛓️ LCEL Generation Chain\n(Prompt NexusBot + Contexto Integrado)"]
-            GroqEngine["⚡ Groq Cloud LPU\n(openai/gpt-oss-120b)"]
-            LCEL --> GroqEngine
+        subgraph Infrastructure_Adapters ["Infrastructure Layer — Adaptadores Externos"]
+            Ad_Pinecone["🌲 PineconeVectorStoreAdapter"]
+            Ad_Wiki["📚 WikipediaAdapter"]
+            Ad_Tavily["📰 TavilyNewsAdapter"]
+            Ad_CheapShark["🏷️ CheapSharkPriceAdapter"]
+            Ad_Groq["⚡ GroqLLMAdapter"]
+            Ad_Laya["🧠 LayaDecisionAdapter"]
         end
     end
 
-    subgraph Output_Stream ["Protocolo de Salida en Tiempo Real"]
-        SSE_Products["📦 SSE type: products\n(Cards de Juegos en UI)"]
-        SSE_Tokens["💬 SSE type: token\n(Streaming Palabra a Palabra)"]
-        SSE_Done["🏁 SSE type: done\n(Fin de Respuesta)"]
+    subgraph External_Cloud_APIs ["Nube & APIs Externas"]
+        Cloud_Pinecone[("🌲 Pinecone Vector DB\n(nexus-catalog / nexus_chile)")]
+        Cloud_Wiki["📚 Wikipedia REST API\n(Lore & Trivia Gamer)"]
+        Cloud_Tavily["📰 Tavily AI Search API\n(Noticias de Última Hora & Parches)"]
+        Cloud_CheapShark["🏷️ CheapShark API\n(Steam, Epic, GOG — MÁS BARATO / CARO)"]
+        Cloud_Groq["⚡ Groq Cloud LPU\n(openai/gpt-oss-120b)"]
     end
 
-    %% Conexiones principales
-    Storefront -->|POST /api/v1/assistant/chat| Node_Decide
-    NexusAI -.->|Inspección Directa de RAG| Node_Decide
-    
-    Checkpointer <-->|State Checkpoints| LangGraph_Core
-    LangGraph_Core -.->|Telemetría, Spans & Traces| LangSmith
+    subgraph Streaming_Protocol ["Protocolo Server-Sent Events (SSE)"]
+        SSE_Cards["📦 data: {'type': 'products', 'data': [...]} (UI Cards)"]
+        SSE_Words["💬 data: {'type': 'token', 'data': '...'} (Tokens)"]
+        SSE_End["🏁 data: {'type': 'done'} (Fin de Stream)"]
+    end
 
-    IntentCheck -->|greeting| Node_Generate
-    IntentCheck -->|stock_price / recommendation| Node_Retrieve
-    
+    %% Conexiones Clientes -> API
+    Storefront -->|POST /chat| Router
+    NexusAI -.->|Test & Inspección de Prompts| Router
+    NexusAI -.->|Similarity Search Directo| Cloud_Pinecone
+
+    Router --> LangGraph_Engine
+    Checkpointer <-->|Guarda / Recupera Turnos| LangGraph_Engine
+    LangGraph_Engine -.->|Trazas @traceable| LangSmith
+
+    %% Transiciones del Grafo
+    IntentRouter -->|greeting| Node_Generate
+    IntentRouter -->|recommendation / stock_price| Node_Retrieve
     Node_Retrieve --> Node_Orchestrate
     Node_Orchestrate --> Node_Generate
-    
-    Node_Generate --> SSE_Products
-    SSE_Products --> SSE_Tokens
-    SSE_Tokens --> SSE_Done
-    SSE_Tokens -->|Renderizado en Vivo| Storefront
-    SSE_Tokens -.->|Inspección de Streaming| NexusAI
+
+    %% Adaptadores a APIs
+    Port_Pinecone -.-> Ad_Pinecone -.-> Cloud_Pinecone
+    Port_Wiki -.-> Ad_Wiki -.-> Cloud_Wiki
+    Port_Tavily -.-> Ad_Tavily -.-> Cloud_Tavily
+    Port_CheapShark -.-> Ad_CheapShark -.-> Cloud_CheapShark
+    LLM_Port -.-> Ad_Groq -.-> Cloud_Groq
+
+    %% Salida Streaming
+    Node_Generate --> SSE_Cards
+    SSE_Cards --> SSE_Words
+    SSE_Words --> SSE_End
+    SSE_Words -->|Renderizado Reactivo| Storefront
+    SSE_Words -.->|Inspección en Tiempo Real| NexusAI
 ```
 
 ### Pipeline Dual (System 1 + System 2)

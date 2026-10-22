@@ -51,3 +51,17 @@ class TestLayaDecisionAdapter:
         assert metrics["need_trivia"] is False
         assert "laya-ai" in metrics["engine"]
 
+    @pytest.mark.asyncio
+    async def test_classify_intent_and_extract_email(self) -> None:
+        adapter = LayaDecisionAdapter(use_heuristics_fallback=True)
+        adapter._router = None
+        adapter._initialized = True
+
+        query = "Envíame las ofertas de Elden Ring a gamer123@gmail.com por favor"
+        metrics = await adapter.evaluate_decision(query)
+
+        assert metrics["intent"] == "send_email"
+        assert metrics["recipient_email"] == "gamer123@gmail.com"
+        assert metrics["need_trivia"] is True
+
+

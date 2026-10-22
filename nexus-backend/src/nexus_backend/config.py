@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     ENABLE_LAYA_DECISION_ENGINE: bool = True
     LAYA_MODEL_NAME: str = "convaiinnovations/laya"
 
+    # Email Delivery (Google Gmail SMTP & App Passwords)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_NAME: str = "Nexus Digital Store 🎮"
+    GMAIL_USER: str = ""
+    GMAIL_APP_PASSWORD: str = ""
+
     VECTOR_SEARCH_TOP_K: int = 5
 
     CORS_ORIGINS: list[str] = ["*"]
