@@ -1,14 +1,20 @@
-name: CI/CD Backend - Push & PR
+name: CI/CD Backend - Push
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       AWS_REGION: us-east-1
       ECR_REPOSITORY: nexus-backend
@@ -31,29 +37,31 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push image to Amazon ECR (PR)
-        if: github.event_name == 'pull_request'
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: pr-${{ github.event.pull_request.number }}
-        working-directory: ./nexus-backend
-        run: |
-          docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build and push image to Amazon ECR (Push to Main)
-        if: github.event_name == 'push'
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: latest
-        working-directory: ./nexus-backend
-        run: |
-          docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+      - name: Build and push image to Amazon ECR
+        uses: docker/build-push-action@v6
+        with:
+          context: ./nexus-backend
+          file: ./nexus-backend/Dockerfile
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ env.ECR_REPOSITORY }}
+          cache-to: type=gha,mode=max,scope=${{ env.ECR_REPOSITORY }}
 
       - name: Update Amazon ECS Service
-        if: github.event_name == 'push'
         run: |
-          aws ecs update-service --cluster $ECS_CLUSTER \
-                                 --service $ECS_SERVICE \
-                                 --force-new-deployment
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment
+
+      - name: Wait for ECS Service to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
