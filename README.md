@@ -10,45 +10,77 @@ Nexus combina lo mejor del desarrollo web moderno, arquitectura limpia y pipelin
 
 ```mermaid
 flowchart TB
-    subgraph Clients ["Capas de Presentación"]
-        Storefront["🌐 Next.js 16 Storefront\n(React 19, Tailwind, 3D Orb, SSE Client)"]
-        StreamlitApp["📊 Streamlit AI Lab\n(Dashboard Interactivo de Prototipado)"]
+    subgraph Clients ["Capas de Presentación (Frontend)"]
+        Storefront["🌐 Next.js 16 Storefront\n(React 19, Tailwind, 3D Canvas, SSE Client)"]
+        AdminPanel["🛡️ Admin Dashboard\n(/admin/games — RBAC con Cognito)"]
     end
 
-    subgraph API ["Backend Core (FastAPI — Arquitectura Hexagonal)"]
-        Router["🛣️ Presentation / REST & SSE Routes"]
-        Services["⚙️ Application / Domain Services"]
-        
-        subgraph AI_Pipeline ["Pipeline Cognitivo Híbrido (System 1 + System 2)"]
-            Laya["🧠 Laya AI (System 1)\nClasificación Reflexiva Rápida"]
-            LangGraph["🔄 LangGraph\nMacro-Orquestador de Estado & MemorySaver"]
-            CrewAI["🤖 CrewAI Multi-Agente (System 2)\nAnalista + Investigador + Estratega"]
+    subgraph AWS_Networking ["Red & Balanceo (AWS Cloud)"]
+        ALB["⚖️ Application Load Balancer (ALB)\n(SSL Termination, Listener Rules, Preflight CORS)"]
+        Route53["🗺️ Amazon Route 53 (Private DNS)\n(db.nexus.internal CNAME)"]
+    end
+
+    subgraph ECS_Cluster ["Cómputo Backend (AWS ECS sobre EC2)"]
+        subgraph FastAPI_Backend ["Nexus Backend Monolith (FastAPI — Arquitectura Hexagonal)"]
+            Router["🛣️ Presentation / REST & SSE Routes"]
+            AuthGuard["🔒 Cognito JWT Guard / RBAC (admin)"]
+            Services["⚙️ Application / Domain Services"]
+            
+            subgraph AI_Pipeline ["Pipeline Cognitivo Híbrido (System 1 + System 2)"]
+                Laya["🧠 Laya AI (System 1)\nClasificación Reflexiva Rápida"]
+                LangGraph["🔄 LangGraph + MemorySaver\n(Macro-Orquestador de Estado Multi-Turno)"]
+                CrewAI["🤖 CrewAI Multi-Agente (System 2)\n(Analista + Investigador + Estratega)"]
+            end
         end
     end
 
-    subgraph Infrastructure ["Infraestructura & Almacenamiento (AWS Cloud)"]
-        AuroraDB[("🐘 Amazon Aurora PostgreSQL\n(Órdenes, Catálogo Relacional)")]
-        Cognito["🔑 Amazon Cognito\n(User Pool / JWT Auth)"]
-        Pinecone[("🌲 Pinecone Vector DB\n(Embeddings MiniLM-L12, Namespace Multitenant)")]
-        Groq["⚡ Groq LPU Cloud\n(Inferencia Ultrarrápida — gpt-oss-20b)"]
-        Wiki["📚 Wikipedia API\n(Enriquecimiento de Lore & Trivia Gamer)"]
-        Tavily["📰 Tavily AI Search API\n(Noticias, Parches y Novedades Gamer)"]
+    subgraph AWS_Data ["Persistencia & Autenticación (AWS Cloud)"]
+        Cognito["🔑 Amazon Cognito User Pool\n(nexus-user-pool / Group: admin)"]
+        subgraph Aurora_Cluster ["Amazon Aurora PostgreSQL (Multi-AZ)"]
+            AuroraWriter[("🐘 Aurora Writer (Primary)\n(Catálogo, Órdenes, Advisory Lock)")]
+            AuroraReader[("📖 Aurora Reader (Replica)\n(Consultas de Solo Lectura)")]
+        end
+    end
+
+    subgraph External_AI_Services ["Servicios Externos de IA & Conocimiento"]
+        Groq["⚡ Groq LPU Cloud\n(Inferencia Ultrarrápida — gpt-oss-120b)"]
+        Pinecone[("🌲 Pinecone Vector DB\n(Búsqueda Semántica 384d, Namespace catalog)")]
+        LangSmith["📊 LangSmith Observability\n(Tracing V2 & Trazabilidad de Grafos)"]
+        Wiki["📚 Wikipedia API\n(Lore, Curiosidades & Cultura Gamer)"]
+        Tavily["📰 Tavily AI Search API\n(Noticias de Última Hora & Parches)"]
         CheapShark["🏷️ CheapShark API\n(Comparativa de Precios: Steam, Epic, GOG)"]
     end
 
-    Storefront -->|REST / SSE Streaming| Router
-    StreamlitApp -.->|Inspección Directa| Pinecone
+    %% Flujos de clientes
+    Storefront -->|HTTPS / SSE Streaming| ALB
+    AdminPanel -->|Admin REST Requests| ALB
+    ALB --> Router
+    
+    %% Autenticación
+    Router --> AuthGuard
+    AuthGuard -.->|Valida JWT con JWKS público| Cognito
+    
+    %% Flujo interno del backend
     Router --> Services
     Services --> AI_Pipeline
+    
+    %% Pipeline de IA
     AI_Pipeline --> Laya
-    AI_Pipeline --> LangGraph
+    Laya -->|Intent & Decision Metrics| LangGraph
     LangGraph --> CrewAI
+    CrewAI --> Groq
+    LangGraph -.->|Telemetría & Traces| LangSmith
+    
+    %% Enriquecimiento RAG & APIs externas
+    LangGraph --> Pinecone
+    LangGraph --> Wiki
     LangGraph --> Tavily
     LangGraph --> CheapShark
-    Services --> Pinecone
-    Services --> AuroraDB
-    Router -.->|JWT Bearer Validation| Cognito
-    CrewAI --> Groq
+    
+    %% Base de datos
+    Services --> Route53
+    Route53 --> AuroraWriter
+    Services -.->|Read Queries| AuroraReader
 ```
 
 ---
@@ -91,6 +123,86 @@ nexus/
 ---
 
 ## 🤖 3. Arquitectura del Asistente IA (NexusBot)
+
+### Diagrama del Pipeline Cognitivo (System 1 + System 2 con LangGraph, CrewAI & APIs)
+
+```mermaid
+flowchart TD
+    subgraph Clients_Observability ["Clientes & Observabilidad"]
+        Storefront["🌐 Next.js Storefront\n(Chat UI Reactivo & SSE)"]
+        NexusAI["📊 nexus-ai Lab (Streamlit)\n(Inspección de Prompts, RAG & Agentes)"]
+        LangSmith["📈 LangSmith Observability\n(Tracing V2 & Trazabilidad de Grafos)"]
+    end
+
+    subgraph LangGraph_Core ["🔄 LangGraph StateGraph (Macro-Orquestador de Estado Multi-Turno)"]
+        direction TB
+        
+        subgraph Memory ["Persistencia de Memoria Multi-Turno"]
+            Checkpointer[("💾 MemorySaver Checkpointer\n(thread_id / session_id)")]
+        end
+
+        %% Nodo 1
+        subgraph Node_Decide ["Nodo 1: decide (System 1 — Laya AI)"]
+            LayaEngine["🧠 Laya AI Decision Engine\n(Clasificación Reflexiva en Microsegundos)"]
+            IntentCheck{"¿Intención?"}
+            LayaEngine --> IntentCheck
+        end
+
+        %% Nodo 2
+        subgraph Node_Retrieve ["Nodo 2: retrieve (RAG Multifuente & APIs Externas)"]
+            direction TB
+            HF_Embed["📐 HuggingFace MiniLM-L12\n(Embeddings 384d)"]
+            PineconeDB[("🌲 Pinecone Vector DB\n(Catálogo de Juegos)")]
+            WikiAPI["📚 Wikipedia API\n(Lore, Curiosidades & Trivia)"]
+            TavilyAPI["📰 Tavily AI Search API\n(Noticias de Última Hora & Parches)"]
+            CheapSharkAPI["🏷️ CheapShark API\n(Steam, Epic, GOG — MÁS BARATO / CARO)"]
+            
+            HF_Embed --> PineconeDB
+        end
+
+        %% Nodo 3
+        subgraph Node_Orchestrate ["Nodo 3: orchestrate (System 2 — CrewAI Multi-Agente)"]
+            direction LR
+            Agent1["📦 Inventory Analyst\n(Valida Stock Real)"]
+            Agent2["🎮 Lore Researcher\n(Cultura Gamer)"]
+            Agent3["💼 Sales Strategist\n(Argumentos Éticos)"]
+            
+            Agent1 --> Agent2 --> Agent3
+        end
+
+        %% Nodo 4
+        subgraph Node_Generate ["Nodo 4: generate (LCEL Chain & Groq LPU)"]
+            LCEL["⛓️ LCEL Generation Chain\n(Prompt NexusBot + Contexto Integrado)"]
+            GroqEngine["⚡ Groq Cloud LPU\n(openai/gpt-oss-120b)"]
+            LCEL --> GroqEngine
+        end
+    end
+
+    subgraph Output_Stream ["Protocolo de Salida en Tiempo Real"]
+        SSE_Products["📦 SSE type: products\n(Cards de Juegos en UI)"]
+        SSE_Tokens["💬 SSE type: token\n(Streaming Palabra a Palabra)"]
+        SSE_Done["🏁 SSE type: done\n(Fin de Respuesta)"]
+    end
+
+    %% Conexiones principales
+    Storefront -->|POST /api/v1/assistant/chat| Node_Decide
+    NexusAI -.->|Inspección Directa de RAG| Node_Decide
+    
+    Checkpointer <-->|State Checkpoints| LangGraph_Core
+    LangGraph_Core -.->|Telemetría, Spans & Traces| LangSmith
+
+    IntentCheck -->|greeting| Node_Generate
+    IntentCheck -->|stock_price / recommendation| Node_Retrieve
+    
+    Node_Retrieve --> Node_Orchestrate
+    Node_Orchestrate --> Node_Generate
+    
+    Node_Generate --> SSE_Products
+    SSE_Products --> SSE_Tokens
+    SSE_Tokens --> SSE_Done
+    SSE_Tokens -->|Renderizado en Vivo| Storefront
+    SSE_Tokens -.->|Inspección de Streaming| NexusAI
+```
 
 ### Pipeline Dual (System 1 + System 2)
 1. **System 1 (Detección Reflexiva Rápida)**:  
